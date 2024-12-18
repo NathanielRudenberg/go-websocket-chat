@@ -2,11 +2,16 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
+	"websocket-chat/chat"
 
 	"github.com/gorilla/websocket"
 )
+
+type MessageEvent struct {
+	message chat.Message
+	conn    *websocket.Conn
+}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -14,14 +19,9 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type Message struct {
-	Username string `json:"username"`
-	Message  string `json:"message"`
-}
-
 var (
 	clients   = make(map[*websocket.Conn]bool)
-	broadcast = make(chan Message)
+	broadcast = make(chan MessageEvent)
 )
 
 func main() {
@@ -42,8 +42,6 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
-	log.Println("Incoming connection!")
-	fmt.Println(r)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Println(err)
@@ -53,27 +51,29 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	clients[conn] = true
 
-	// TODO: possibly make server able to handle client connection
 	for {
-		var msg Message
+		var msg chat.Message
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			fmt.Println(err)
 			delete(clients, conn)
 			return
 		}
-
-		broadcast <- msg
+		messageEvent := MessageEvent{message: msg, conn: conn}
+		broadcast <- messageEvent
 	}
 }
 
 func handleMessages() {
 	for {
 		msg := <-broadcast
-		fmt.Println("Message:", msg)
+		fmt.Println("Message:", msg.message)
 
 		for client := range clients {
-			err := client.WriteJSON(msg)
+			var err error
+			if client != msg.conn {
+				err = client.WriteJSON(msg.message)
+			}
 			if err != nil {
 				fmt.Println(err)
 				client.Close()

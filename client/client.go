@@ -1,28 +1,33 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"time"
+	"websocket-chat/chat"
 
 	"github.com/gorilla/websocket"
 )
 
-type Message struct {
-	Username string `json:"username"`
-	Message  string `json:"message"`
-}
+var username string
 
 func main() {
 	log.Print("program running")
-	message := make(chan string)
+	broadcast := make(chan chat.Message)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
-	_ = message
 
 	// go handleMessages()
+
+	// Get username from user
+	fmt.Print("Enter your username: ")
+	reader := bufio.NewReader(os.Stdin)
+	username, _ = reader.ReadString('\n')
+	username = username[:len(username)-1]
 
 	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws"}
 	log.Printf("connecting to %s", u.String())
@@ -39,45 +44,62 @@ func main() {
 		defer close(done)
 
 		for {
-			_, msg, err := conn.ReadMessage()
+			var msg chat.Message
+			err := conn.ReadJSON(&msg)
 			if err != nil {
 				log.Println("read:", err)
 				return
 			}
 
-			log.Printf("recv: %s", msg)
-			if string(msg) == "Connected" {
-				log.Printf("Successfully connected")
-				// TODO idk send message to channel or something
-				// message <- "Pablo: compramos carros y camionetas viejas para desarmar"
+			fmt.Println(msg)
+		}
+	}
+
+	writeHandler := func() {
+		for {
+			// fmt.Print("You: ")
+			writeMsg := chat.Message{Username: username, Message: ""}
+			writeMsg.Message, _ = reader.ReadString('\n')
+			msgLength := len(writeMsg.Message)
+			writeMsg.Message = writeMsg.Message[:msgLength-1]
+			if writeMsg.Message != "" {
+				broadcast <- writeMsg
 			}
+			// select {
+			// case <-done:
+			// 	log.Println("done")
+			// 	return
+			// case <-time.After(time.Millisecond):
+			// }
 		}
 	}
 
 	go connectionHandler()
+	go writeHandler()
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	// ticker := time.NewTicker(time.Second)
+	// defer ticker.Stop()
 
 	for {
 		select {
 		case <-done:
 			log.Printf("done")
 			return
-		case m := <-message:
-			log.Printf("Send Message %s", m)
+		case m := <-broadcast:
+			// log.Printf("Send Message %s", m)
 			err := conn.WriteJSON(m)
 			if err != nil {
 				log.Println("write:", err)
 				return
 			}
-		case t := <-ticker.C:
-			timeMessage := Message{"PabloTest", t.String()}
-			err := conn.WriteJSON(timeMessage)
-			if err != nil {
-				log.Println("write:", err)
-				return
-			}
+		// case t := <-ticker.C:
+		// 	message := chat.Message{Username: "PabloTest", Message: t.String()}
+		// 	timeMessage := message
+		// 	err := conn.WriteJSON(timeMessage)
+		// 	if err != nil {
+		// 		log.Println("write:", err)
+		// 		return
+		// 	}
 		case <-interrupt:
 			log.Println("interrupt")
 			// Cleanly close the connection by sending a close message and then
@@ -97,6 +119,6 @@ func main() {
 	}
 }
 
-func handleMessages() {
-	// get handled, idiot
-}
+// TODO get handled, idiot
+// func handleMessages() {
+// }
