@@ -42,6 +42,8 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
+	log.Println("Incoming connection!")
+	fmt.Println(r)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Println(err)
@@ -54,14 +56,12 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	// TODO: possibly make server able to handle client connection
 	for {
 		var msg Message
-		log.Printf("we looping messages")
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			fmt.Println(err)
 			delete(clients, conn)
 			return
 		}
-		log.Printf("we looped messages")
 
 		broadcast <- msg
 	}
@@ -70,12 +70,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 func handleMessages() {
 	for {
 		msg := <-broadcast
-		fmt.Println("reading messages")
-		fmt.Print(msg)
+		fmt.Println("Message:", msg)
 
 		for client := range clients {
 			err := client.WriteJSON(msg)
-			fmt.Println(msg)
 			if err != nil {
 				fmt.Println(err)
 				client.Close()

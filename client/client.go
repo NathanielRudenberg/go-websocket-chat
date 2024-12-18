@@ -10,16 +10,17 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// type Message struct {
-// 	Username string `json:"username"`
-// 	Message  string `json:"message"`
-// }
+type Message struct {
+	Username string `json:"username"`
+	Message  string `json:"message"`
+}
 
 func main() {
 	log.Print("program running")
 	message := make(chan string)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
+	_ = message
 
 	// go handleMessages()
 
@@ -31,18 +32,14 @@ func main() {
 		log.Printf("handshake failed with status %d", response.StatusCode)
 		log.Fatal("dial:", err)
 	}
-
 	defer conn.Close()
 
 	done := make(chan struct{})
-	go func() {
+	connectionHandler := func() {
 		defer close(done)
 
-		log.Print("bout to loop through messages")
 		for {
-			log.Print("bout to read messages")
 			_, msg, err := conn.ReadMessage()
-			log.Printf("read message: %s", string(msg))
 			if err != nil {
 				log.Println("read:", err)
 				return
@@ -52,16 +49,15 @@ func main() {
 			if string(msg) == "Connected" {
 				log.Printf("Successfully connected")
 				// TODO idk send message to channel or something
-				message <- "Pablo: compramos carros y camionetas viejas para desarmar"
+				// message <- "Pablo: compramos carros y camionetas viejas para desarmar"
 			}
-			log.Print("we read messages")
 		}
-	}()
+	}
+
+	go connectionHandler()
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-
-	log.Printf("We made the ticker!")
 
 	for {
 		select {
@@ -75,9 +71,9 @@ func main() {
 				log.Println("write:", err)
 				return
 			}
-
 		case t := <-ticker.C:
-			err := conn.WriteMessage(websocket.TextMessage, []byte(t.String()))
+			timeMessage := Message{"PabloTest", t.String()}
+			err := conn.WriteJSON(timeMessage)
 			if err != nil {
 				log.Println("write:", err)
 				return
