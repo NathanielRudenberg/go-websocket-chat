@@ -71,11 +71,11 @@ func doKeyExchange(conn *websocket.Conn) {
 
 func handleInfo(info *comm.Message, conn *websocket.Conn) {
 	switch info.Message {
-	case "ke" :
-			err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
-			if err != nil {
-				log.Println("send info:", err)
-			}
+	case "ke":
+		err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
+		if err != nil {
+			log.Println("send info:", err)
+		}
 	case "rk":
 		// Received room key
 		rkString := string(info.Data)
@@ -146,7 +146,7 @@ func main() {
 			}
 
 			if msg.Type == comm.Text {
-				err := msg.Print(psk.Bytes())
+				err := msg.Print(roomKey)
 				if err != nil {
 					log.Println("decryption:", err)
 					continue
@@ -175,7 +175,7 @@ func main() {
 				continue
 			}
 			// Encrypt the message
-			encryptedMessage, err := util.Encrypt([]byte(messageInput), psk.Bytes())
+			encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
 			if err != nil {
 				log.Println("encryption:", err)
 				continue
