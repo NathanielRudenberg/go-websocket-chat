@@ -9,6 +9,7 @@ type Message struct {
 	Username string `json:"username"`
 	Message  string `json:"message"`
 	Type     int    `json:"messageType"`
+	Data     []byte `json:"data"`
 }
 
 func (msg Message) String() string {

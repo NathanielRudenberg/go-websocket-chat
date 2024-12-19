@@ -1,5 +1,8 @@
 package util
 
+// https://www.codingexplorations.com/blog/understanding-encryption-in-go-a-developers-guide
+// https://eminmuhammadi.com/articles/diffiehellman-key-exchange-example-in-golang
+
 import (
 	"crypto/aes"
 	"crypto/cipher"

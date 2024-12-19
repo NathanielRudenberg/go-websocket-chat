@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"math/big"
@@ -19,7 +20,16 @@ var (
 	username string
 	P        *big.Int
 	psk      *big.Int
+	roomKey  []byte
 )
+
+func sendEncryptedMessage(messageType int, data []byte, key []byte, conn *websocket.Conn) error {
+	encryptedMessage, err := util.Encrypt(data, key)
+	if err != nil {
+		return err
+	}
+	return conn.WriteMessage(messageType, []byte(encryptedMessage))
+}
 
 func doKeyExchange(conn *websocket.Conn) {
 	// Receive P from server
@@ -57,6 +67,44 @@ func doKeyExchange(conn *websocket.Conn) {
 	log.Println("Client PSK:", psk)
 
 	// TODO: Implement key exchange with multiple clients
+}
+
+func handleInfo(info *comm.Message, conn *websocket.Conn) {
+	switch info.Message {
+	case "ke" :
+			err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
+			if err != nil {
+				log.Println("send info:", err)
+			}
+	case "rk":
+		// Received room key
+		rkString := string(info.Data)
+		decryptedKeyBytes, err := util.Decrypt(rkString, psk.Bytes())
+		if err != nil {
+
+		}
+		roomKey = decryptedKeyBytes
+		log.Println("received room key:", roomKey)
+	}
+}
+func handleCommand(command *comm.Message, conn *websocket.Conn) {
+	switch command.Message {
+	case "exchange-keys":
+		doKeyExchange(conn)
+	case "share-room-key":
+		if roomKey == nil {
+			roomKey = make([]byte, 32)
+			_, err := rand.Read(roomKey)
+			if err != nil {
+				log.Println("room key:", err)
+			}
+		}
+		log.Println("room key:", roomKey)
+		err := sendEncryptedMessage(websocket.BinaryMessage, roomKey, psk.Bytes(), conn)
+		if err != nil {
+			log.Println("send room key:", err)
+		}
+	}
 }
 
 func main() {
@@ -108,16 +156,12 @@ func main() {
 			}
 
 			if msg.Type == comm.Command {
-				doKeyExchange(conn)
+				handleCommand(&msg, conn)
+				// doKeyExchange(conn)
 			}
 
 			if msg.Type == comm.Info {
-				if msg.Message == "ke" {
-					err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
-					if err != nil {
-						log.Println("send info:", err)
-					}
-				}
+				handleInfo(&msg, conn)
 			}
 		}
 	}

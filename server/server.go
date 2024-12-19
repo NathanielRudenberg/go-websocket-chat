@@ -33,6 +33,10 @@ func (C *Client) WriteJSON(v interface{}) error {
 	return C.conn.WriteJSON(v)
 }
 
+func (C *Client) sendCommand(command string) error {
+	return C.WriteJSON(comm.Message{Username: "server", Message: command, Type: comm.Command})
+}
+
 type MessageEvent struct {
 	message comm.Message
 	client  *Client
@@ -83,8 +87,8 @@ func negotiateKeys(newClient *Client, keyHub *Client) {
 		log.Println("telling key hub to exchange keys")
 		keyHub.WriteJSON(comm.Message{Username: "server", Message: "ke", Type: comm.Info})
 	}
-	keyHub.WriteJSON(comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command})
-	newClient.WriteJSON(comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command})
+	keyHub.sendCommand("exchange-keys")
+	newClient.sendCommand("exchange-keys")
 	// Hub sends P and G to both clients
 	// Send P  and G to key hub
 	keyHub.WriteMessage(websocket.BinaryMessage, P.Bytes())
@@ -116,6 +120,15 @@ func negotiateKeys(newClient *Client, keyHub *Client) {
 	keyHub.WriteMessage(websocket.BinaryMessage, newClientPubKey.Bytes())
 	// Each client calculates the PSK
 	// Presumably, at this point, the key hub would send the shared room key to the new client. If it has one.
+	keyHub.sendCommand("share-room-key")
+	_, roomKey, err := keyHub.ReadMessage()
+	if err != nil {
+		log.Println("kh room key recv:", err)
+		keyHub.Disconnect()
+		return
+	}
+	log.Println("Got room key:", roomKey)
+	newClient.WriteJSON(comm.Message{Username: "server", Message: "rk", Data: roomKey, Type: comm.Info})
 	keyHub.DHDone = true
 }
 
