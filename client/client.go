@@ -167,9 +167,6 @@ func main() {
 	go connectionHandler()
 	go inputHandler()
 
-	// ticker := time.NewTicker(time.Second)
-	// defer ticker.Stop()
-
 	for {
 		select {
 		case <-done:
@@ -182,14 +179,6 @@ func main() {
 				log.Println("write:", err)
 				return
 			}
-		// case t := <-ticker.C:
-		// 	message := comm.Message{Username: "PabloTest", Message: t.String()}
-		// 	timeMessage := message
-		// 	err := conn.WriteJSON(timeMessage)
-		// 	if err != nil {
-		// 		log.Println("write:", err)
-		// 		return
-		// 	}
 		case <-interrupt:
 			log.Println("interrupt")
 			// Cleanly close the connection by sending a close message and then

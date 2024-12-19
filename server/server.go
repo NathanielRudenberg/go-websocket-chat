@@ -173,15 +173,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	// doKeyExchange(client)
 
-	// if len(clients) == 0 {
-	// 	setKeyHub(client)
-	// 	encryptedPabloMessage, err := util.Encrypt([]byte("You are the key czar"), psk.Bytes())
-	// 	if err != nil {
-	// 		log.Println("encryption:", err)
-	// 	}
-	// 	keyHub.WriteJSON(comm.Message{Username: "ServerPablo", Message: encryptedPabloMessage})
-	// }
-
 	clients[client] = true
 
 	// When there are two clients connecting, do the key exchange
@@ -214,6 +205,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					fmt.Println("read messages:", err)
 					log.Println("Key hub disconnected")
 					keyHub = nil
+					// Choose new key hub
+					for c := range clients {
+						setKeyHub(c)
+						break
+					}
 				}
 				return
 			}
