@@ -22,24 +22,19 @@ var (
 )
 
 func doKeyExchange(conn *websocket.Conn) {
-	log.Println("Connecting to server. Exchanging keys...")
 	// Receive P from server
-	log.Println("Receiving P from server")
 	_, Pbytes, err := conn.ReadMessage()
 	if err != nil {
 		log.Println("handshake:", err)
 		return
 	}
-	log.Println("Received P from server")
 	P := new(big.Int).SetBytes(Pbytes)
 	// Receive G from server
-	log.Println("Receiving G from server")
 	_, Gbytes, err := conn.ReadMessage()
 	if err != nil {
 		log.Println("handshake:", err)
 		return
 	}
-	log.Println("Received G from server")
 	G := new(big.Int).SetBytes(Gbytes)
 
 	// Calculate private key
@@ -48,22 +43,16 @@ func doKeyExchange(conn *websocket.Conn) {
 	publicKey := util.CalculatePublicKey(P, privateKey, G)
 
 	// Send public key to server
-	log.Println("Sending public key to server:", publicKey)
-	log.Println("Public key bytes:", publicKey.Bytes())
 	conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
-	log.Println("Sent public key to server")
 	// Receive pub key from server
-	log.Println("Receiving public key from server")
 	_, serverPubKeyBytes, err := conn.ReadMessage()
 	if err != nil {
 		log.Println("handshake:", err)
 		return
 	}
-	log.Println("Received public key from server")
 	serverPubKey := new(big.Int).SetBytes(serverPubKeyBytes)
 	// Calculate PSK with server pub key
 	psk = util.CalculateSharedSecret(P, privateKey, serverPubKey)
-	log.Println("Finished exchanging keys")
 	// Use PSK to encrypt and decrypt messages
 	log.Println("Client PSK:", psk)
 
@@ -109,25 +98,20 @@ func main() {
 			}
 
 			if msg.Type == comm.Text {
-				// Decrypt message
-				decryptedBytes, err := util.Decrypt(msg.Message, psk.Bytes())
+				err := msg.Print(psk.Bytes())
 				if err != nil {
 					log.Println("decryption:", err)
 					continue
 				}
-				decryptedMessage := string(decryptedBytes)
-
-				fmt.Println(msg)
-				fmt.Println(decryptedMessage)
+				// fmt.Println(msg)
+				// fmt.Println(decryptedMessage)
 			}
 
 			if msg.Type == comm.Command {
-				log.Println("Command received, gonna do a key exchange")
 				doKeyExchange(conn)
 			}
 
 			if msg.Type == comm.Info {
-				log.Println("Info received")
 				if msg.Message == "ke" {
 					err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
 					if err != nil {
