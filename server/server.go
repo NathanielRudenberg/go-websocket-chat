@@ -151,7 +151,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clients[client] = true
 
 	// When there are two clients connecting, do the key exchange
-	if len(clients) == 2 {
+	if len(clients) >= 2 {
 		negotiateKeys(client, keyHub)
 		client.DHDone = true
 	}
