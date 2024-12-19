@@ -45,14 +45,14 @@ var upgrader = websocket.Upgrader{
 }
 
 var (
-	clients             = make(map[*Client]bool)
-	broadcast           = make(chan MessageEvent)
-	P          *big.Int = util.GeneratePrime()
-	G                   = big.NewInt(2)
-	privateKey          = util.GeneratePrivateKey(P)
-	publicKey           = util.CalculatePublicKey(P, privateKey, G)
-	psk        *big.Int
-	keyHub     *Client
+	clients            = make(map[*Client]bool)
+	broadcast          = make(chan MessageEvent)
+	P         *big.Int = util.GeneratePrime()
+	G                  = big.NewInt(2)
+	keyHub    *Client
+	// privateKey                              = util.GeneratePrivateKey(P)
+	// publicKey                               = util.CalculatePublicKey(P, privateKey, G)
+	// psk                            *big.Int
 )
 
 func main() {
@@ -78,37 +78,43 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 // Diffie-Hellman handshake
-func doKeyExchange(client *Client) {
-	log.Println("New client connected. Exchanging keys...")
-	// Send P to client
-	client.WriteMessage(websocket.BinaryMessage, P.Bytes())
-	// Send G to client
-	client.WriteMessage(websocket.BinaryMessage, G.Bytes())
-	// Send pub key to client
-	client.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
-	// Receive client's pub key
-	_, clientPubKeyBytes, err := client.ReadMessage()
-	if err != nil {
-		log.Println(err)
-		delete(clients, client)
-		return
-	}
-	clientPubKey := new(big.Int).SetBytes(clientPubKeyBytes)
-	// Calculate PSK with pub key
-	psk = util.CalculateSharedSecret(P, privateKey, clientPubKey)
-	_ = psk
-	log.Println("Finished exchanging keys")
-	// Use PSK to encrypt and decrypt
-	log.Println("Server PSK:", psk)
-}
+// func doKeyExchange(client *Client) {
+// 	log.Println("New client connected. Exchanging keys...")
+// 	// Send P to client
+// 	client.WriteMessage(websocket.BinaryMessage, P.Bytes())
+// 	// Send G to client
+// 	client.WriteMessage(websocket.BinaryMessage, G.Bytes())
+// 	// Send pub key to client
+// 	client.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+// 	// Receive client's pub key
+// 	_, clientPubKeyBytes, err := client.ReadMessage()
+// 	if err != nil {
+// 		log.Println("pub key recv:", err)
+// 		delete(clients, client)
+// 		return
+// 	}
+// 	clientPubKey := new(big.Int).SetBytes(clientPubKeyBytes)
+// 	// Calculate PSK with pub key
+// 	psk = util.CalculateSharedSecret(P, privateKey, clientPubKey)
+// 	_ = psk
+// 	log.Println("Finished exchanging keys")
+// 	// Use PSK to encrypt and decrypt
+// 	log.Println("Server PSK:", psk)
+// }
 
-func negotiateKeys(newClient *Client, currentClient *Client) {
-	currentClient.DHDone = false
+func negotiateKeys(newClient *Client, keyHub *Client) {
+	// Tell hub and new client to exchange keys
+	if keyHub.DHDone {
+		log.Println("telling key hub to exchange keys")
+		keyHub.WriteJSON(comm.Message{Username: "server", Message: "ke", Type: comm.Info})
+	}
+	keyHub.WriteJSON(comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command})
+	newClient.WriteJSON(comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command})
 	// Hub sends P and G to both clients
-	// Send P  and G to old client
+	// Send P  and G to key hub
 	log.Println("Sending P and G to clients")
-	currentClient.WriteMessage(websocket.BinaryMessage, P.Bytes())
-	currentClient.WriteMessage(websocket.BinaryMessage, G.Bytes())
+	keyHub.WriteMessage(websocket.BinaryMessage, P.Bytes())
+	keyHub.WriteMessage(websocket.BinaryMessage, G.Bytes())
 	// Send P and G to new client
 	newClient.WriteMessage(websocket.BinaryMessage, P.Bytes())
 	newClient.WriteMessage(websocket.BinaryMessage, G.Bytes())
@@ -119,58 +125,51 @@ func negotiateKeys(newClient *Client, currentClient *Client) {
 	log.Println("Receiving public key from new client")
 	_, newClientPubKeyBytes, err := newClient.ReadMessage()
 	if err != nil {
-		log.Println("pub key recv:", err)
+		log.Println("nc pub key recv:", err)
 		newClient.Disconnect()
 		return
 	}
 	newClientPubKey := new(big.Int).SetBytes(newClientPubKeyBytes)
 	log.Println("Received public key from new client:", newClientPubKey)
-	// Receive old client's public key
-	log.Println("Receiving public key from old client")
-	_, oldClientPubKeyBytes, err := currentClient.ReadMessage()
+	// Receive key hub's public key
+	log.Println("Receiving public key from key hub")
+	_, oldClientPubKeyBytes, err := keyHub.ReadMessage()
 	if err != nil {
-		log.Println("pub key recv:", err)
+		log.Println("kh pub key recv:", err)
 		// delete(clients, currentClient)
 		return
 	}
 	oldClientPubKey := new(big.Int).SetBytes(oldClientPubKeyBytes)
-	log.Println("Received public key from old client:", oldClientPubKey)
-	// Send old client's public key to new client
-	log.Println("Sending old client's public key to new client")
+	log.Println("Received public key from key hub:", oldClientPubKey)
+	// Send key hub's public key to new client
+	log.Println("Sending key hub's public key to new client")
 	newClient.WriteMessage(websocket.BinaryMessage, oldClientPubKey.Bytes())
-	log.Println("Sent old client's public key to new client")
-	// Send new client's public key to old client
-	log.Println("Sending new client's public key to old client")
-	currentClient.WriteMessage(websocket.BinaryMessage, newClientPubKey.Bytes())
-	log.Println("Sent new client's public key to old client")
+	log.Println("Sent key hub's public key to new client")
+	// Send new client's public key to key hub
+	log.Println("Sending new client's public key to key hub")
+	keyHub.WriteMessage(websocket.BinaryMessage, newClientPubKey.Bytes())
+	log.Println("Sent new client's public key to key hub")
 	// Each client calculates the PSK
 
 	// clients[currentClient] = true
 	// clients[newClient] = true
-	currentClient.DHDone = true
+	keyHub.DHDone = true
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("handle connections:", err)
 		return
 	}
 	defer conn.Close()
 
 	client := &Client{conn: conn, isKeyHub: false, DHDone: false}
 
-	// When there are two clients connecting, do the key exchange
-	if len(clients) == 1 {
-		log.Println(("We have enough clients for a key exchange! What an exciting time!"))
-		for oldClient := range clients {
-			log.Println("Doing key exchange!")
-			// delete(clients, oldClient)
-			negotiateKeys(client, oldClient)
-		}
-		client.DHDone = true
+	if len(clients) == 0 {
+		log.Println("Setting key hub")
+		setKeyHub(client)
 	}
-	log.Println("We left the if block for some reason")
 
 	// doKeyExchange(client)
 
@@ -185,19 +184,55 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	clients[client] = true
 
+	// When there are two clients connecting, do the key exchange
+	if len(clients) == 2 {
+		log.Println(("We have enough clients for a key exchange! What an exciting time!"))
+		log.Println("Doing key exchange!")
+		negotiateKeys(client, keyHub)
+		client.DHDone = true
+	}
+	log.Println("We left the if block for some reason")
+
 	for {
+		// if client.isKeyHub {
+		// 	log.Println("Checking messages again")
+		// }
 		if client.DHDone {
+			if client.isKeyHub {
+				log.Println("You should not see this message during a key exchange. If you do, something went wrong.")
+			}
 			var msg comm.Message
+			// if client.isKeyHub {
+			// 	log.Println("Reading message from key hub")
+			// } else {
+			// 	log.Println("Reading message from nonhub")
+			// }
 			err := conn.ReadJSON(&msg)
 			if err != nil {
-				fmt.Println(err)
 				delete(clients, client)
+				if client.isKeyHub {
+					fmt.Println("read messages:", err)
+					log.Println("Key hub disconnected")
+					keyHub = nil
+				}
 				return
 			}
-			log.Println("There was a new message")
-			log.Println("Message received:", msg)
-			messageEvent := MessageEvent{message: msg, client: client}
-			broadcast <- messageEvent
+
+			if msg.Type == comm.Text {
+				// log.Println("There was a new message")
+				if client.isKeyHub {
+					log.Println("Message received:", msg)
+				}
+				messageEvent := MessageEvent{message: msg, client: client}
+				broadcast <- messageEvent
+			}
+
+			if msg.Type == comm.Info {
+				if msg.Message == "ke" {
+					log.Println("Key hub needs to do a key exchange")
+					client.DHDone = false
+				}
+			}
 		}
 	}
 }
@@ -211,7 +246,7 @@ func handleMessages() {
 		// 	continue
 		// }
 		// decryptedMessage := string(decryptedBytes)
-		fmt.Println("Message:", msg.message)
+		// fmt.Println("Message:", msg.message)
 		// fmt.Println("Decrypted message:", decryptedMessage)
 
 		for client := range clients {
@@ -220,7 +255,7 @@ func handleMessages() {
 				err = client.WriteJSON(msg.message)
 			}
 			if err != nil {
-				fmt.Println(err)
+				fmt.Println("handle messages:", err)
 				client.Disconnect()
 				delete(clients, client)
 			}

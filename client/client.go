@@ -94,7 +94,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	doKeyExchange(conn)
+	// doKeyExchange(conn)
 
 	done := make(chan struct{})
 	connectionHandler := func() {
@@ -108,20 +108,37 @@ func main() {
 				return
 			}
 
-			// Decrypt message
-			decryptedBytes, err := util.Decrypt(msg.Message, psk.Bytes())
-			if err != nil {
-				log.Println("decryption:", err)
-				continue
-			}
-			decryptedMessage := string(decryptedBytes)
+			if msg.Type == comm.Text {
+				// Decrypt message
+				decryptedBytes, err := util.Decrypt(msg.Message, psk.Bytes())
+				if err != nil {
+					log.Println("decryption:", err)
+					continue
+				}
+				decryptedMessage := string(decryptedBytes)
 
-			fmt.Println(msg)
-			fmt.Println(decryptedMessage)
+				fmt.Println(msg)
+				fmt.Println(decryptedMessage)
+			}
+
+			if msg.Type == comm.Command {
+				log.Println("Command received, gonna do a key exchange")
+				doKeyExchange(conn)
+			}
+
+			if msg.Type == comm.Info {
+				log.Println("Info received")
+				if msg.Message == "ke" {
+					err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
+					if err != nil {
+						log.Println("send info:", err)
+					}
+				}
+			}
 		}
 	}
 
-	writeHandler := func() {
+	inputHandler := func() {
 		for {
 			messageInput, _ := reader.ReadString('\n')
 			msgLength := len(messageInput)
@@ -148,7 +165,7 @@ func main() {
 	}
 
 	go connectionHandler()
-	go writeHandler()
+	go inputHandler()
 
 	// ticker := time.NewTicker(time.Second)
 	// defer ticker.Stop()
