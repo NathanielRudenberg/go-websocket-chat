@@ -4,16 +4,58 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/big"
 	"net/url"
 	"os"
 	"os/signal"
 	"time"
 	"websocket-chat/chat"
+	"websocket-chat/util"
 
 	"github.com/gorilla/websocket"
 )
 
-var username string
+var (
+	username string
+	P        *big.Int
+	psk      *big.Int
+)
+
+func doKeyExchange(conn *websocket.Conn) {
+	// Receive P from server
+	log.Println("Connecting to server. Exchanging keys...")
+	_, Pbytes, err := conn.ReadMessage()
+	if err != nil {
+		log.Println("handshake:", err)
+		return
+	}
+	P := new(big.Int).SetBytes(Pbytes)
+	// Receive G from server
+	_, Gbytes, err := conn.ReadMessage()
+	if err != nil {
+		log.Println("handshake:", err)
+		return
+	}
+	G := new(big.Int).SetBytes(Gbytes)
+	// Receive pub key from server
+	_, serverPubKeyBytes, err := conn.ReadMessage()
+	if err != nil {
+		log.Println("handshake:", err)
+		return
+	}
+	serverPubKey := new(big.Int).SetBytes(serverPubKeyBytes)
+	// Calculate private key
+	privateKey := util.GeneratePrivateKey(P)
+	// Calculate public key
+	publicKey := util.CalculatePublicKey(P, privateKey, G)
+	// Send public key to server
+	conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+	// Calculate PSK with server pub key
+	psk = util.CalculateSharedSecret(P, privateKey, serverPubKey)
+	log.Println("Finished exchanging keys")
+	// Use PSK to encrypt and decrypt messages
+	log.Println("Client PSK:", psk)
+}
 
 func main() {
 	log.Print("program running")
@@ -39,6 +81,8 @@ func main() {
 	}
 	defer conn.Close()
 
+	doKeyExchange(conn)
+
 	done := make(chan struct{})
 	connectionHandler := func() {
 		defer close(done)
@@ -51,7 +95,16 @@ func main() {
 				return
 			}
 
+			// Decrypt message
+			decryptedBytes, err := util.Decrypt(msg.Message, psk.Bytes())
+			if err != nil {
+				log.Println("decryption:", err)
+				continue
+			}
+			decryptedMessage := string(decryptedBytes)
+
 			fmt.Println(msg)
+			fmt.Println(decryptedMessage)
 		}
 	}
 
@@ -59,9 +112,17 @@ func main() {
 		for {
 			// fmt.Print("You: ")
 			writeMsg := chat.Message{Username: username, Message: ""}
-			writeMsg.Message, _ = reader.ReadString('\n')
-			msgLength := len(writeMsg.Message)
-			writeMsg.Message = writeMsg.Message[:msgLength-1]
+			messageInput, _ := reader.ReadString('\n')
+			msgLength := len(messageInput)
+			messageInput = messageInput[:msgLength-1]
+			// Encrypt the message
+			encryptedMessage, err := util.Encrypt([]byte(messageInput), psk.Bytes())
+			if err != nil {
+				log.Println("encryption:", err)
+				continue
+			}
+
+			writeMsg.Message = encryptedMessage
 			if writeMsg.Message != "" {
 				broadcast <- writeMsg
 			}
