@@ -63,10 +63,6 @@ func doKeyExchange(conn *websocket.Conn) {
 	serverPubKey := new(big.Int).SetBytes(serverPubKeyBytes)
 	// Calculate PSK with server pub key
 	psk = util.CalculateSharedSecret(P, privateKey, serverPubKey)
-	// Use PSK to encrypt and decrypt messages
-	log.Println("Client PSK:", psk)
-
-	// TODO: Implement key exchange with multiple clients
 }
 
 func handleInfo(info *comm.Message, conn *websocket.Conn) {
@@ -84,7 +80,6 @@ func handleInfo(info *comm.Message, conn *websocket.Conn) {
 
 		}
 		roomKey = decryptedKeyBytes
-		log.Println("received room key:", roomKey)
 	}
 }
 func handleCommand(command *comm.Message, conn *websocket.Conn) {
@@ -99,7 +94,6 @@ func handleCommand(command *comm.Message, conn *websocket.Conn) {
 				log.Println("room key:", err)
 			}
 		}
-		log.Println("room key:", roomKey)
 		err := sendEncryptedMessage(websocket.BinaryMessage, roomKey, psk.Bytes(), conn)
 		if err != nil {
 			log.Println("send room key:", err)
@@ -131,8 +125,6 @@ func main() {
 	}
 	defer conn.Close()
 
-	// doKeyExchange(conn)
-
 	done := make(chan struct{})
 	connectionHandler := func() {
 		defer close(done)
@@ -151,13 +143,10 @@ func main() {
 					log.Println("decryption:", err)
 					continue
 				}
-				// fmt.Println(msg)
-				// fmt.Println(decryptedMessage)
 			}
 
 			if msg.Type == comm.Command {
 				handleCommand(&msg, conn)
-				// doKeyExchange(conn)
 			}
 
 			if msg.Type == comm.Info {

@@ -37,6 +37,14 @@ func (C *Client) sendCommand(command string) error {
 	return C.WriteJSON(comm.Message{Username: "server", Message: command, Type: comm.Command})
 }
 
+func (C *Client) sendInfo(info string) error {
+	return C.WriteJSON(comm.Message{Username: "server", Message: info, Type: comm.Info})
+}
+
+func (C *Client) sendText(text string) error {
+	return C.WriteJSON(comm.Message{Username: "server", Message: text, Type: comm.Text})
+}
+
 type MessageEvent struct {
 	message comm.Message
 	client  *Client
@@ -127,7 +135,6 @@ func negotiateKeys(newClient *Client, keyHub *Client) {
 		keyHub.Disconnect()
 		return
 	}
-	log.Println("Got room key:", roomKey)
 	newClient.WriteJSON(comm.Message{Username: "server", Message: "rk", Data: roomKey, Type: comm.Info})
 	keyHub.DHDone = true
 }
@@ -145,8 +152,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	if len(clients) == 0 {
 		setKeyHub(client)
 	}
-
-	// doKeyExchange(client)
 
 	clients[client] = true
 
