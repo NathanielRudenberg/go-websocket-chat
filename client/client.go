@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"time"
-	"websocket-chat/chat"
+	"websocket-chat/comm"
 	"websocket-chat/util"
 
 	"github.com/gorilla/websocket"
@@ -22,44 +22,57 @@ var (
 )
 
 func doKeyExchange(conn *websocket.Conn) {
-	// Receive P from server
 	log.Println("Connecting to server. Exchanging keys...")
+	// Receive P from server
+	log.Println("Receiving P from server")
 	_, Pbytes, err := conn.ReadMessage()
 	if err != nil {
 		log.Println("handshake:", err)
 		return
 	}
+	log.Println("Received P from server")
 	P := new(big.Int).SetBytes(Pbytes)
 	// Receive G from server
+	log.Println("Receiving G from server")
 	_, Gbytes, err := conn.ReadMessage()
 	if err != nil {
 		log.Println("handshake:", err)
 		return
 	}
+	log.Println("Received G from server")
 	G := new(big.Int).SetBytes(Gbytes)
+
+	// Calculate private key
+	privateKey := util.GeneratePrivateKey(P)
+	// Calculate public key
+	publicKey := util.CalculatePublicKey(P, privateKey, G)
+
+	// Send public key to server
+	log.Println("Sending public key to server:", publicKey)
+	log.Println("Public key bytes:", publicKey.Bytes())
+	conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+	log.Println("Sent public key to server")
 	// Receive pub key from server
+	log.Println("Receiving public key from server")
 	_, serverPubKeyBytes, err := conn.ReadMessage()
 	if err != nil {
 		log.Println("handshake:", err)
 		return
 	}
+	log.Println("Received public key from server")
 	serverPubKey := new(big.Int).SetBytes(serverPubKeyBytes)
-	// Calculate private key
-	privateKey := util.GeneratePrivateKey(P)
-	// Calculate public key
-	publicKey := util.CalculatePublicKey(P, privateKey, G)
-	// Send public key to server
-	conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
 	// Calculate PSK with server pub key
 	psk = util.CalculateSharedSecret(P, privateKey, serverPubKey)
 	log.Println("Finished exchanging keys")
 	// Use PSK to encrypt and decrypt messages
 	log.Println("Client PSK:", psk)
+
+	// TODO: Implement key exchange with multiple clients
 }
 
 func main() {
 	log.Print("program running")
-	broadcast := make(chan chat.Message)
+	broadcast := make(chan comm.Message)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
@@ -88,7 +101,7 @@ func main() {
 		defer close(done)
 
 		for {
-			var msg chat.Message
+			var msg comm.Message
 			err := conn.ReadJSON(&msg)
 			if err != nil {
 				log.Println("read:", err)
@@ -110,11 +123,12 @@ func main() {
 
 	writeHandler := func() {
 		for {
-			// fmt.Print("You: ")
-			writeMsg := chat.Message{Username: username, Message: ""}
 			messageInput, _ := reader.ReadString('\n')
 			msgLength := len(messageInput)
 			messageInput = messageInput[:msgLength-1]
+			if messageInput == "" {
+				continue
+			}
 			// Encrypt the message
 			encryptedMessage, err := util.Encrypt([]byte(messageInput), psk.Bytes())
 			if err != nil {
@@ -122,10 +136,8 @@ func main() {
 				continue
 			}
 
-			writeMsg.Message = encryptedMessage
-			if writeMsg.Message != "" {
-				broadcast <- writeMsg
-			}
+			writeMsg := comm.Message{Username: username, Message: encryptedMessage}
+			broadcast <- writeMsg
 			// select {
 			// case <-done:
 			// 	log.Println("done")
@@ -154,7 +166,7 @@ func main() {
 				return
 			}
 		// case t := <-ticker.C:
-		// 	message := chat.Message{Username: "PabloTest", Message: t.String()}
+		// 	message := comm.Message{Username: "PabloTest", Message: t.String()}
 		// 	timeMessage := message
 		// 	err := conn.WriteJSON(timeMessage)
 		// 	if err != nil {

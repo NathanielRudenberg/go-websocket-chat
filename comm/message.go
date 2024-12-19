@@ -1,4 +1,4 @@
-package chat
+package comm
 
 import "fmt"
 
@@ -9,8 +9,4 @@ type Message struct {
 
 func (msg Message) String() string {
 	return fmt.Sprintf("%s: %s", msg.Username, msg.Message)
-}
-
-func TestFunc() string {
-	return "pablotestfunc"
 }
