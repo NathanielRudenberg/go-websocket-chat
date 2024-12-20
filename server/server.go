@@ -118,7 +118,8 @@ func negotiateKeys(newClient *Client, keyHub *Client) {
 	_, oldClientPubKeyBytes, err := keyHub.ReadMessage()
 	if err != nil {
 		log.Println("kh pub key recv:", err)
-		// delete(clients, currentClient)
+		keyHub.Disconnect()
+		newClient.Disconnect()
 		return
 	}
 	oldClientPubKey := new(big.Int).SetBytes(oldClientPubKeyBytes)
