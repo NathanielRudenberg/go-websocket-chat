@@ -19,6 +19,7 @@ import (
 var (
 	username string
 	P        *big.Int
+	G        *big.Int
 	psk      *big.Int
 	roomKey  []byte
 )
@@ -38,14 +39,14 @@ func doKeyExchange(conn *websocket.Conn) {
 		log.Println("handshake:", err)
 		return
 	}
-	P := new(big.Int).SetBytes(Pbytes)
+	P = new(big.Int).SetBytes(Pbytes)
 	// Receive G from server
 	_, Gbytes, err := conn.ReadMessage()
 	if err != nil {
 		log.Println("handshake:", err)
 		return
 	}
-	G := new(big.Int).SetBytes(Gbytes)
+	G = new(big.Int).SetBytes(Gbytes)
 
 	// Calculate private key
 	privateKey := util.GeneratePrivateKey(P)
@@ -53,7 +54,11 @@ func doKeyExchange(conn *websocket.Conn) {
 	publicKey := util.CalculatePublicKey(P, privateKey, G)
 
 	// Send public key to server
-	conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+	if err != nil {
+		log.Println("handshake:", err)
+		return
+	}
 	// Receive pub key from server
 	_, serverPubKeyBytes, err := conn.ReadMessage()
 	if err != nil {

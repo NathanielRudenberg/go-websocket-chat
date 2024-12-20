@@ -6,48 +6,15 @@ import (
 	"math/big"
 	"net/http"
 	"websocket-chat/comm"
+	serverclient "websocket-chat/server/serverClient"
 	"websocket-chat/util"
 
 	"github.com/gorilla/websocket"
 )
 
-type Client struct {
-	conn     *websocket.Conn
-	isKeyHub bool
-	DHDone   bool
-}
-
-func (C *Client) ReadMessage() (messageType int, p []byte, err error) {
-	return C.conn.ReadMessage()
-}
-
-func (C *Client) WriteMessage(messageType int, data []byte) error {
-	return C.conn.WriteMessage(messageType, data)
-}
-
-func (C *Client) Disconnect() {
-	C.conn.Close()
-}
-
-func (C *Client) WriteJSON(v interface{}) error {
-	return C.conn.WriteJSON(v)
-}
-
-func (C *Client) sendCommand(command string) error {
-	return C.WriteJSON(comm.Message{Username: "server", Message: command, Type: comm.Command})
-}
-
-func (C *Client) sendInfo(info string) error {
-	return C.WriteJSON(comm.Message{Username: "server", Message: info, Type: comm.Info})
-}
-
-func (C *Client) sendText(text string) error {
-	return C.WriteJSON(comm.Message{Username: "server", Message: text, Type: comm.Text})
-}
-
 type MessageEvent struct {
 	message comm.Message
-	client  *Client
+	client  *serverclient.Client
 }
 
 var upgrader = websocket.Upgrader{
@@ -57,11 +24,11 @@ var upgrader = websocket.Upgrader{
 }
 
 var (
-	clients            = make(map[*Client]bool)
+	clients            = make(map[*serverclient.Client]bool)
 	broadcast          = make(chan MessageEvent)
 	P         *big.Int = util.GeneratePrime()
 	G                  = big.NewInt(2)
-	keyHub    *Client
+	keyHub    *serverclient.Client
 	// privateKey                              = util.GeneratePrivateKey(P)
 	// publicKey                               = util.CalculatePublicKey(P, privateKey, G)
 	// psk                            *big.Int
@@ -80,23 +47,31 @@ func main() {
 	}
 }
 
-func setKeyHub(client *Client) {
-	client.isKeyHub = true
+func setKeyHub(client *serverclient.Client) {
+	client.SetIsKeyHub(true)
 	keyHub = client
+}
+
+func chooseNewKeyHub() {
+	keyHub = nil
+	for c := range clients {
+		setKeyHub(c)
+		break
+	}
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Pablo")
 }
 
-func negotiateKeys(newClient *Client, keyHub *Client) {
+func negotiateKeys(newClient *serverclient.Client, keyHub *serverclient.Client) {
 	// Tell hub and new client to exchange keys
 	if keyHub.DHDone {
 		log.Println("telling key hub to exchange keys")
 		keyHub.WriteJSON(comm.Message{Username: "server", Message: "ke", Type: comm.Info})
 	}
-	keyHub.sendCommand("exchange-keys")
-	newClient.sendCommand("exchange-keys")
+	keyHub.SendCommand("exchange-keys")
+	newClient.SendCommand("exchange-keys")
 	// Hub sends P and G to both clients
 	// Send P  and G to key hub
 	keyHub.WriteMessage(websocket.BinaryMessage, P.Bytes())
@@ -119,6 +94,7 @@ func negotiateKeys(newClient *Client, keyHub *Client) {
 	if err != nil {
 		log.Println("kh pub key recv:", err)
 		keyHub.Disconnect()
+		chooseNewKeyHub()
 		newClient.Disconnect()
 		return
 	}
@@ -129,11 +105,12 @@ func negotiateKeys(newClient *Client, keyHub *Client) {
 	keyHub.WriteMessage(websocket.BinaryMessage, newClientPubKey.Bytes())
 	// Each client calculates the PSK
 	// Presumably, at this point, the key hub would send the shared room key to the new client. If it has one.
-	keyHub.sendCommand("share-room-key")
+	keyHub.SendCommand("share-room-key")
 	_, roomKey, err := keyHub.ReadMessage()
 	if err != nil {
 		log.Println("kh room key recv:", err)
 		keyHub.Disconnect()
+		chooseNewKeyHub()
 		return
 	}
 	newClient.WriteJSON(comm.Message{Username: "server", Message: "rk", Data: roomKey, Type: comm.Info})
@@ -148,7 +125,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	client := &Client{conn: conn, isKeyHub: false, DHDone: false}
+	client := &serverclient.Client{Conn: conn, DHDone: false}
+	client.SetIsKeyHub(false)
 
 	if len(clients) == 0 {
 		setKeyHub(client)
@@ -157,49 +135,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clients[client] = true
 
 	// When there are two clients connecting, do the key exchange
-	if len(clients) >= 2 {
+	if keyHub != nil && keyHub != client {
 		negotiateKeys(client, keyHub)
 		client.DHDone = true
 	}
 
 	for {
 		if client.DHDone {
-			var msg comm.Message
-			// if client.isKeyHub {
-			// 	log.Println("Reading message from key hub")
-			// } else {
-			// 	log.Println("Reading message from nonhub")
-			// }
-			err := conn.ReadJSON(&msg)
-			if err != nil {
-				delete(clients, client)
-				if client.isKeyHub {
-					fmt.Println("read messages:", err)
-					log.Println("Key hub disconnected")
-					keyHub = nil
-					// Choose new key hub
-					for c := range clients {
-						setKeyHub(c)
-						break
-					}
-				}
-				return
-			}
-
-			if msg.Type == comm.Text {
-				// if client.isKeyHub {
-				// 	log.Println("Message received:", msg)
-				// }
-				messageEvent := MessageEvent{message: msg, client: client}
-				broadcast <- messageEvent
-			}
-
-			if msg.Type == comm.Info {
-				if msg.Message == "ke" {
-					log.Println("Key hub needs to do a key exchange")
-					client.DHDone = false
-				}
-			}
+			listenMessages(conn, client)
 		}
 	}
 }
@@ -217,6 +160,41 @@ func handleMessages() {
 				client.Disconnect()
 				delete(clients, client)
 			}
+		}
+	}
+}
+
+func listenMessages(conn *websocket.Conn, client *serverclient.Client) {
+	var msg comm.Message
+	// if client.isKeyHub {
+	// 	log.Println("Reading message from key hub")
+	// } else {
+	// 	log.Println("Reading message from nonhub")
+	// }
+	err := conn.ReadJSON(&msg)
+	if err != nil {
+		delete(clients, client)
+		if client.IsKeyHub() {
+			fmt.Println("read messages:", err)
+			log.Println("Key hub disconnected")
+			// Choose new key hub
+			chooseNewKeyHub()
+		}
+		return
+	}
+
+	if msg.Type == comm.Text {
+		// if client.isKeyHub {
+		// 	log.Println("Message received:", msg)
+		// }
+		messageEvent := MessageEvent{message: msg, client: client}
+		broadcast <- messageEvent
+	}
+
+	if msg.Type == comm.Info {
+		if msg.Message == "ke" {
+			log.Println("Key hub needs to do a key exchange")
+			client.DHDone = false
 		}
 	}
 }
