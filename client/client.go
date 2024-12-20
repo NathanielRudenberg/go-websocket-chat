@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"flag"
 	"fmt"
 	"log"
 	"math/big"
@@ -112,6 +113,10 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
+	hostName := flag.String("host", "localhost", "Server Hostname")
+	hostPort := flag.Int("port", 8080, "Server Port")
+	flag.Parse()
+
 	// go handleMessages()
 
 	// Get username from user
@@ -120,7 +125,7 @@ func main() {
 	username, _ = reader.ReadString('\n')
 	username = username[:len(username)-1]
 
-	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/ws"}
 	log.Printf("connecting to %s", u.String())
 
 	conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"math/big"
@@ -29,19 +30,18 @@ var (
 	P         *big.Int = util.GeneratePrime()
 	G                  = big.NewInt(2)
 	keyHub    *serverclient.Client
-	// privateKey                              = util.GeneratePrivateKey(P)
-	// publicKey                               = util.CalculatePublicKey(P, privateKey, G)
-	// psk                            *big.Int
 )
 
 func main() {
+	hostPort := flag.Int("port", 8080, "Server Port")
+	flag.Parse()
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/ws", handleConnections)
 
 	go handleMessages()
 
-	fmt.Println("Server started on :8080")
-	err := http.ListenAndServe(":8080", nil)
+	fmt.Printf("Server started on :%s", fmt.Sprint(*hostPort))
+	err := http.ListenAndServe(fmt.Sprintf(":%d", *hostPort), nil)
 	if err != nil {
 		panic("Error starting server: " + err.Error())
 	}
