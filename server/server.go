@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
+	"sync"
 	"websocket-chat/comm"
 	serverclient "websocket-chat/server/serverClient"
 	"websocket-chat/util"
@@ -27,12 +29,14 @@ var upgrader = websocket.Upgrader{
 }
 
 var (
-	clients            = make(map[*serverclient.Client]bool)
-	ids                = make(map[string]*serverclient.Client)
-	broadcast          = make(chan MessageEvent)
-	P         *big.Int = util.GeneratePrime()
-	G                  = big.NewInt(2)
-	keyHub    *serverclient.Client
+	clients         = make(map[*serverclient.Client]bool)
+	incomingClients = make(map[*serverclient.Client]bool)
+	ids             = make(map[string]*serverclient.Client)
+	broadcast       = make(chan MessageEvent)
+	P               = util.GeneratePrime()
+	G               = big.NewInt(2)
+	keyHub          *serverclient.Client
+	mu              sync.Mutex
 )
 
 func main() {
@@ -46,7 +50,7 @@ func main() {
 
 	// Hold a queue of incoming clients
 	// This queue might need a mutex, idk yet
-	// When a client tries to connect, add it to the queue
+	// When a client tries to connect: lock the mutex, add it to the queue, unlock the mutex
 	// Open a new connection from the key hub
 	// The key hub locks the mutex, pulls a client from the queue, unlocks the mutex, exchanges keys with the client, then shares the room key
 	// The key hub closes the connection
@@ -57,6 +61,7 @@ func main() {
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/ws", handleConnections)
 	http.HandleFunc("/connect", handleJoin)
+	http.HandleFunc("/key-exchange", handleKeyExchange) // The key hub connects here to exchange keys with new clients
 
 	go handleMessages()
 
@@ -84,18 +89,18 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Pablo")
 }
 
-func negotiateKeys(newClient *serverclient.Client, keyHub *serverclient.Client) {
+func negotiateKeys(newClient *serverclient.Client, keyHubConnection *websocket.Conn) error {
 	// Tell hub and new client to exchange keys
 	if keyHub.DHDone {
 		log.Println("telling key hub to exchange keys")
 		keyHub.WriteJSON(comm.Message{Username: "server", Message: "ke", Type: comm.Info})
 	}
-	keyHub.SendCommand("exchange-keys")
+	serverclient.SendCommand(keyHubConnection, "exchange-keys")
 	newClient.SendCommand("exchange-keys")
 	// Hub sends P and G to both clients
 	// Send P  and G to key hub
-	keyHub.WriteBinaryMessage(P.Bytes())
-	keyHub.WriteBinaryMessage(G.Bytes())
+	serverclient.WriteBinaryMessage(keyHubConnection, P.Bytes())
+	serverclient.WriteBinaryMessage(keyHubConnection, G.Bytes())
 	// Send P and G to new client
 	newClient.WriteBinaryMessage(P.Bytes())
 	newClient.WriteBinaryMessage(G.Bytes())
@@ -104,37 +109,57 @@ func negotiateKeys(newClient *serverclient.Client, keyHub *serverclient.Client) 
 	// Receive new client's public key
 	_, newClientPubKeyBytes, err := newClient.ReadMessage()
 	if err != nil {
-		log.Println("nc pub key recv:", err)
+		newError := errors.New("Error receiving new client's public key:" + err.Error())
 		newClient.Disconnect()
-		return
+		return newError
 	}
 	newClientPubKey := new(big.Int).SetBytes(newClientPubKeyBytes)
 	// Receive key hub's public key
-	_, oldClientPubKeyBytes, err := keyHub.ReadMessage()
+	_, oldClientPubKeyBytes, err := keyHubConnection.ReadMessage()
 	if err != nil {
-		log.Println("kh pub key recv:", err)
-		keyHub.Disconnect()
-		chooseNewKeyHub()
+		newError := errors.New("Error receiving key hub's public key:" + err.Error())
+		// keyHubConnection.Disconnect()
 		newClient.Disconnect()
-		return
+		return newError
 	}
 	oldClientPubKey := new(big.Int).SetBytes(oldClientPubKeyBytes)
 	// Send key hub's public key to new client
 	newClient.WriteBinaryMessage(oldClientPubKey.Bytes())
 	// Send new client's public key to key hub
-	keyHub.WriteBinaryMessage(newClientPubKey.Bytes())
+	serverclient.WriteBinaryMessage(keyHubConnection, newClientPubKey.Bytes())
 	// Each client calculates the PSK
 	// Presumably, at this point, the key hub would send the shared room key to the new client. If it has one.
-	keyHub.SendCommand("share-room-key")
-	_, roomKey, err := keyHub.ReadMessage()
+	serverclient.SendCommand(keyHubConnection, "share-room-key")
+	_, roomKey, err := keyHubConnection.ReadMessage()
 	if err != nil {
 		log.Println("kh room key recv:", err)
-		keyHub.Disconnect()
-		chooseNewKeyHub()
-		return
+		newError := errors.New("Error receiving room key from key hub:" + err.Error())
+		// keyHubConnection.Disconnect()
+		return newError
 	}
 	newClient.WriteJSON(comm.Message{Username: "server", Message: "rk", Data: roomKey, Type: comm.Info})
-	keyHub.DHDone = true
+	return nil
+}
+
+func handleKeyExchange(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		fmt.Println("handle join:", err)
+		return
+	}
+	defer conn.Close()
+
+	mu.Lock()
+	var incomingClient *serverclient.Client
+	for client := range incomingClients {
+		incomingClient = client
+		delete(incomingClients, client)
+		break
+	}
+	mu.Unlock()
+	_ = incomingClient
+
+	// negotiateKeys(incomingClient, conn)
 }
 
 func handleJoin(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +170,9 @@ func handleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 	client := &serverclient.Client{Conn: conn}
+	mu.Lock()
+	incomingClients[client] = true
+	mu.Unlock()
 
 	// Get client ID
 	var joinMessage comm.Message
@@ -165,6 +193,13 @@ func handleJoin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ids[clientIdString].Conn = nil
+	}
+
+	// If there is a key hub, do key exchange
+	if keyHub != nil {
+		exchangeKeys := comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command}
+		messageEvent := MessageEvent{message: exchangeKeys, recipient: keyHub}
+		broadcast <- messageEvent
 	}
 }
 
@@ -196,12 +231,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	client.Conn = conn
 	clients[client] = true
 
-	// When there are two clients connecting, do the key exchange
 	if keyHub == nil {
+		mu.Lock()
+		delete(incomingClients, client)
+		mu.Unlock()
 		setKeyHub(client)
-		// newMessageForKeyHub := comm.Message{Username: "server", Message: "Ayo you are the key hub", Type: comm.Text}
-		// messageEvent := MessageEvent{message: newMessageForKeyHub, recipient: keyHub}
-		// broadcast <- messageEvent
+		makeKeysMessage := comm.Message{Username: "server", Message: "generate-keys", Type: comm.Command}
+		messageEvent := MessageEvent{message: makeKeysMessage, recipient: keyHub}
+		broadcast <- messageEvent
 	} else {
 		// Send a message to key hub to open new connection?
 		// Make key hub channel for the new connection?

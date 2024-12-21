@@ -104,7 +104,12 @@ func handleInfo(info *comm.Message, conn *websocket.Conn) {
 func handleCommand(command *comm.Message, conn *websocket.Conn) {
 	switch command.Message {
 	case "exchange-keys":
-		doKeyExchange(conn)
+		// Only the key hub should receive this command
+		// doKeyExchange(conn)
+		log.Println("should do key exchange")
+		hostName := "localhost"
+		hostPort := 8080
+		mimicKeyExchange(&hostName, &hostPort)
 	case "share-room-key":
 		checkRoomKey()
 		err := sendEncryptedMessage(websocket.BinaryMessage, roomKey, psk.Bytes(), conn)
@@ -120,6 +125,20 @@ func handleCommand(command *comm.Message, conn *websocket.Conn) {
 	case "join-chat":
 
 	}
+}
+
+func mimicKeyExchange(hostName *string, hostPort *int) error {
+	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/key-exchange"}
+	conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Printf("handshake failed with status %d", response.StatusCode)
+		log.Fatal("dial:", err)
+		return err
+	}
+	defer conn.Close()
+
+	log.Println("Successfully connected to key exchange endpoint!")
+	return nil
 }
 
 func initJoin(hostName *string, hostPort *int) error {
@@ -174,6 +193,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	username, _ = reader.ReadString('\n')
 	username = username[:len(username)-1]
+	// username := "PabloDebug"
 
 	err := initJoin(hostName, hostPort)
 	if err != nil {
