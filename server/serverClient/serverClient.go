@@ -36,7 +36,7 @@ func (C *Client) SendCommand(command string) error {
 	return C.WriteJSON(comm.Message{Username: "server", Message: command, Type: comm.Command})
 }
 
-func (C *Client) SendInfo(info string) error {
+func (C *Client) SendInfo(info string, data []byte) error {
 	return C.WriteJSON(comm.Message{Username: "server", Message: info, Type: comm.Info})
 }
 

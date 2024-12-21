@@ -10,6 +10,7 @@ import (
 	serverclient "websocket-chat/server/serverClient"
 	"websocket-chat/util"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -26,6 +27,7 @@ var upgrader = websocket.Upgrader{
 
 var (
 	clients            = make(map[*serverclient.Client]bool)
+	ids                = make(map[string]*serverclient.Client)
 	broadcast          = make(chan MessageEvent)
 	P         *big.Int = util.GeneratePrime()
 	G                  = big.NewInt(2)
@@ -35,6 +37,11 @@ var (
 func main() {
 	// Each connection only supports one goroutine for Read and one for Write
 	// Client connects to "connect" endpoint (functions as a key exchange request)
+
+	// ??? Key hub opens new connection to server, exchanges keys with new client on that connection, closes the connection
+	// Client performs key exchange and whatever with key hub
+	// Client connects to chat endpoint (currently /ws)
+	// Profit????? I guess?
 
 	hostPort := flag.Int("port", 8080, "Server Port")
 	flag.Parse()
@@ -122,18 +129,34 @@ func negotiateKeys(newClient *serverclient.Client, keyHub *serverclient.Client) 
 }
 
 func handleJoin(w http.ResponseWriter, r *http.Request) {
-	// ??? Key hub opens new connection to server, exchanges keys with new client on that connection, closes the connection
-	// Client performs key exchange and whatever with key hub
-	// Client connects to chat endpoint (currently /ws)
-	// Profit????? I guess?
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Println("handle join:", err)
 		return
 	}
 	defer conn.Close()
-	log.Println("New client wants to join")
+	client := &serverclient.Client{Conn: conn}
 
+	// Get client ID
+	var joinMessage comm.Message
+	err = client.Conn.ReadJSON(&joinMessage)
+	if err != nil {
+		log.Println("handle join: get id:", err)
+		return
+	}
+
+	if joinMessage.Type == comm.Info && joinMessage.Message == "join" {
+		clientId := (*uuid.UUID)(joinMessage.Data)
+		clientIdString := clientId.String()
+		ids[clientIdString] = client
+		err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "join-chat", Type: comm.Command})
+		if err != nil {
+			log.Println("handle join: send join chat command:", err)
+			delete(ids, clientIdString)
+			return
+		}
+		ids[clientIdString].Conn = nil
+	}
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
@@ -144,16 +167,35 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	client := &serverclient.Client{Conn: conn, DHDone: false}
+	// Get client ID
+	var joinMessage comm.Message
+	err = conn.ReadJSON(&joinMessage)
+	if err != nil {
+		log.Println("handle connections: get id:", err)
+		return
+	}
+	var clientId *uuid.UUID
+	if joinMessage.Type == comm.Info && joinMessage.Message == "join" {
+		clientId = (*uuid.UUID)(joinMessage.Data)
+	} else {
+		fmt.Println("Invalid join message")
+		return
+	}
+
+	clientIdString := clientId.String()
+	client := ids[clientIdString]
+	client.Conn = conn
 	clients[client] = true
 
 	// When there are two clients connecting, do the key exchange
 	if keyHub == nil {
 		setKeyHub(client)
+	} else {
+		// Send a message to key hub to open new connection?
+		// Make key hub channel for the new connection?
 	}
 
 	for {
-		// if client.DHDone {
 		// listenMessages(conn, client)
 
 		var msg comm.Message
@@ -161,10 +203,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			delete(clients, client)
 			if client.IsKeyHub() {
-				fmt.Println("read messages:", err)
+				// fmt.Println("read messages:", err)
 				log.Println("Key hub disconnected")
 				// Choose new key hub
-				// chooseNewKeyHub()
+				chooseNewKeyHub()
 			} else {
 				log.Println("read: non kh client disconnected")
 			}
@@ -182,7 +224,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				client.DHDone = false
 			}
 		}
-		// }
 	}
 }
 

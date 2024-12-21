@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"websocket-chat/comm"
 	"websocket-chat/util"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -22,6 +24,7 @@ var (
 	P, G, psk                     *big.Int
 	myP, myG, myPrivKey, myPubKey *big.Int
 	roomKey                       []byte
+	id                            = uuid.New()
 )
 
 func checkRoomKey() {
@@ -114,11 +117,48 @@ func handleCommand(command *comm.Message, conn *websocket.Conn) {
 		myPrivKey = util.GeneratePrivateKey(myP)
 		myPubKey = util.CalculatePublicKey(myP, myPrivKey, myG)
 		checkRoomKey()
+	case "join-chat":
+
 	}
 }
 
+func initJoin(hostName *string, hostPort *int) error {
+	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/connect"}
+	// log.Printf("connecting to %s", u.String())
+	log.Printf("connecting to %s:%d", *hostName, *hostPort)
+	conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Printf("handshake failed with status %d", response.StatusCode)
+		log.Fatal("dial:", err)
+		return err
+	}
+	defer conn.Close()
+
+	// Send join message
+	uuidBinary, err := id.MarshalBinary()
+	if err != nil {
+		log.Println("marshal uuid:", err)
+		return err
+	}
+	err = conn.WriteJSON(comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary})
+	if err != nil {
+		log.Println("send join:", err)
+		return err
+	}
+
+	var joinChatCommand comm.Message
+	err = conn.ReadJSON(&joinChatCommand)
+	if err != nil {
+		log.Println("read join chat command:", err)
+		return err
+	}
+	if joinChatCommand.Message == "join-chat" && joinChatCommand.Type == comm.Command {
+		return nil
+	}
+	return errors.New("did not receive join chat command")
+}
+
 func main() {
-	log.Print("program running")
 	broadcast := make(chan comm.Message)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
@@ -135,8 +175,15 @@ func main() {
 	username, _ = reader.ReadString('\n')
 	username = username[:len(username)-1]
 
+	err := initJoin(hostName, hostPort)
+	if err != nil {
+		log.Println("join server:", err)
+		return
+	} else {
+	}
+
 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/ws"}
-	log.Printf("connecting to %s", u.String())
+	// log.Printf("connecting to %s", u.String())
 
 	conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
@@ -144,6 +191,7 @@ func main() {
 		log.Fatal("dial:", err)
 	}
 	defer conn.Close()
+	log.Println("Joined chat")
 
 	done := make(chan struct{})
 	connectionHandler := func() {
@@ -177,6 +225,13 @@ func main() {
 	}
 
 	inputHandler := func() {
+		// First message to send is the uuid
+		uuidBinary, err := id.MarshalBinary()
+		if err != nil {
+			log.Println("marshal uuid:", err)
+			return
+		}
+		broadcast <- comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary}
 		for {
 			messageInput, _ := reader.ReadString('\n')
 			msgLength := len(messageInput)
@@ -186,10 +241,10 @@ func main() {
 			}
 			// Encrypt the message
 			// encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
-			if err != nil {
-				log.Println("encryption:", err)
-				continue
-			}
+			// if err != nil {
+			// 	log.Println("encryption:", err)
+			// 	continue
+			// }
 
 			// writeMsg := comm.Message{Username: username, Message: encryptedMessage}
 			writeMsg := comm.Message{Username: username, Message: messageInput, Type: comm.Text}
