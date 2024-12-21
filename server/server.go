@@ -145,61 +145,44 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	client := &serverclient.Client{Conn: conn, DHDone: false}
-	// client.SetIsKeyHub(false)
 	clients[client] = true
 
 	// When there are two clients connecting, do the key exchange
 	if keyHub == nil {
 		setKeyHub(client)
-	} else {
-		log.Println("Negotiating keys")
-		negotiateKeys(client, keyHub)
-		client.DHDone = true
 	}
 
-	// if len(clients) == 0 {
-	// 	setKeyHub(client)
-	// }
-
 	for {
-		if client.DHDone {
-			// listenMessages(conn, client)
+		// if client.DHDone {
+		// listenMessages(conn, client)
 
-			var msg comm.Message
-			// if client.isKeyHub {
-			// 	log.Println("Reading message from key hub")
-			// } else {
-			// 	log.Println("Reading message from nonhub")
-			// }
-			err := conn.ReadJSON(&msg)
-			if err != nil {
-				delete(clients, client)
-				if client.IsKeyHub() {
-					fmt.Println("read messages:", err)
-					log.Println("Key hub disconnected")
-					// Choose new key hub
-					// chooseNewKeyHub()
-				} else {
-					log.Println("read: non kh client disconnected")
-				}
-				return
+		var msg comm.Message
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			delete(clients, client)
+			if client.IsKeyHub() {
+				fmt.Println("read messages:", err)
+				log.Println("Key hub disconnected")
+				// Choose new key hub
+				// chooseNewKeyHub()
+			} else {
+				log.Println("read: non kh client disconnected")
 			}
+			return
+		}
 
-			if msg.Type == comm.Text {
-				// if client.isKeyHub {
-				// 	log.Println("Message received:", msg)
-				// }
-				messageEvent := MessageEvent{message: msg, client: client}
-				broadcast <- messageEvent
-			}
+		if msg.Type == comm.Text {
+			messageEvent := MessageEvent{message: msg, client: client}
+			broadcast <- messageEvent
+		}
 
-			if msg.Type == comm.Info {
-				if msg.Message == "ke" {
-					log.Println("Key hub needs to do a key exchange")
-					client.DHDone = false
-				}
+		if msg.Type == comm.Info {
+			if msg.Message == "ke" {
+				log.Println("Key hub needs to do a key exchange")
+				client.DHDone = false
 			}
 		}
+		// }
 	}
 }
 

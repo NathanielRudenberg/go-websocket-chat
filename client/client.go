@@ -158,11 +158,12 @@ func main() {
 			}
 
 			if msg.Type == comm.Text {
-				err := msg.Print(roomKey)
-				if err != nil {
-					log.Println("decryption:", err)
-					continue
-				}
+				// err := msg.Print(roomKey)
+				fmt.Println(msg)
+				// if err != nil {
+				// 	log.Println("decryption:", err)
+				// 	continue
+				// }
 			}
 
 			if msg.Type == comm.Command {
@@ -184,13 +185,14 @@ func main() {
 				continue
 			}
 			// Encrypt the message
-			encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
+			// encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
 			if err != nil {
 				log.Println("encryption:", err)
 				continue
 			}
 
-			writeMsg := comm.Message{Username: username, Message: encryptedMessage}
+			// writeMsg := comm.Message{Username: username, Message: encryptedMessage}
+			writeMsg := comm.Message{Username: username, Message: messageInput, Type: comm.Text}
 			broadcast <- writeMsg
 			// select {
 			// case <-done:
@@ -210,7 +212,6 @@ func main() {
 			log.Printf("done")
 			return
 		case m := <-broadcast:
-			// log.Printf("Send Message %s", m)
 			err := conn.WriteJSON(m)
 			if err != nil {
 				log.Println("write:", err)
