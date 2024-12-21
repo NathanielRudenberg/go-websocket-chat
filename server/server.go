@@ -15,8 +15,9 @@ import (
 )
 
 type MessageEvent struct {
-	message comm.Message
-	client  *serverclient.Client
+	message   comm.Message
+	client    *serverclient.Client
+	recipient *serverclient.Client
 }
 
 var upgrader = websocket.Upgrader{
@@ -42,6 +43,14 @@ func main() {
 	// Client performs key exchange and whatever with key hub
 	// Client connects to chat endpoint (currently /ws)
 	// Profit????? I guess?
+
+	// Hold a queue of incoming clients
+	// This queue might need a mutex, idk yet
+	// When a client tries to connect, add it to the queue
+	// Open a new connection from the key hub
+	// The key hub locks the mutex, pulls a client from the queue, unlocks the mutex, exchanges keys with the client, then shares the room key
+	// The key hub closes the connection
+	// The client connects to the chat endpoint, now able to send encrypted messages
 
 	hostPort := flag.Int("port", 8080, "Server Port")
 	flag.Parse()
@@ -190,9 +199,15 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	// When there are two clients connecting, do the key exchange
 	if keyHub == nil {
 		setKeyHub(client)
+		// newMessageForKeyHub := comm.Message{Username: "server", Message: "Ayo you are the key hub", Type: comm.Text}
+		// messageEvent := MessageEvent{message: newMessageForKeyHub, recipient: keyHub}
+		// broadcast <- messageEvent
 	} else {
 		// Send a message to key hub to open new connection?
 		// Make key hub channel for the new connection?
+		// newMessageForKeyHub := comm.Message{Username: "server", Message: "Ayo you are the key hub AND someone new has joined", Type: comm.Text}
+		// messageEvent := MessageEvent{message: newMessageForKeyHub, recipient: keyHub}
+		// broadcast <- messageEvent
 	}
 
 	for {
@@ -229,16 +244,25 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 func handleMessages() {
 	for {
-		msg := <-broadcast
-		for client := range clients {
-			var err error
-			if client != msg.client {
-				err = client.WriteJSON(msg.message)
-			}
+		msgEvent := <-broadcast
+		if msgEvent.recipient != nil {
+			err := msgEvent.recipient.WriteJSON(msgEvent.message)
 			if err != nil {
 				fmt.Println("handle messages:", err)
-				client.Disconnect()
-				delete(clients, client)
+				msgEvent.recipient.Disconnect()
+				delete(clients, msgEvent.recipient)
+			}
+		} else {
+			for client := range clients {
+				var err error
+				if client != msgEvent.client {
+					err = client.WriteJSON(msgEvent.message)
+				}
+				if err != nil {
+					fmt.Println("handle messages:", err)
+					client.Disconnect()
+					delete(clients, client)
+				}
 			}
 		}
 	}
