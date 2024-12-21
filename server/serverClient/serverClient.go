@@ -16,8 +16,12 @@ func (C *Client) ReadMessage() (messageType int, p []byte, err error) {
 	return C.Conn.ReadMessage()
 }
 
-func (C *Client) WriteMessage(messageType int, data []byte) error {
-	return C.Conn.WriteMessage(messageType, data)
+func (C *Client) WriteBinaryMessage(data []byte) error {
+	return C.Conn.WriteMessage(websocket.BinaryMessage, data)
+}
+
+func (C *Client) WriteTextMessage(data []byte) error {
+	return C.Conn.WriteMessage(websocket.TextMessage, data)
 }
 
 func (C *Client) Disconnect() {
