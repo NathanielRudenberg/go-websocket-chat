@@ -18,12 +18,21 @@ import (
 )
 
 var (
-	username string
-	P        *big.Int
-	G        *big.Int
-	psk      *big.Int
-	roomKey  []byte
+	username                      string
+	P, G, psk                     *big.Int
+	myP, myG, myPrivKey, myPubKey *big.Int
+	roomKey                       []byte
 )
+
+func checkRoomKey() {
+	if roomKey == nil {
+		roomKey = make([]byte, 32)
+		_, err := rand.Read(roomKey)
+		if err != nil {
+			log.Println("room key:", err)
+		}
+	}
+}
 
 func sendEncryptedMessage(messageType int, data []byte, key []byte, conn *websocket.Conn) error {
 	encryptedMessage, err := util.Encrypt(data, key)
@@ -88,22 +97,23 @@ func handleInfo(info *comm.Message, conn *websocket.Conn) {
 		roomKey = decryptedKeyBytes
 	}
 }
+
 func handleCommand(command *comm.Message, conn *websocket.Conn) {
 	switch command.Message {
 	case "exchange-keys":
 		doKeyExchange(conn)
 	case "share-room-key":
-		if roomKey == nil {
-			roomKey = make([]byte, 32)
-			_, err := rand.Read(roomKey)
-			if err != nil {
-				log.Println("room key:", err)
-			}
-		}
+		checkRoomKey()
 		err := sendEncryptedMessage(websocket.BinaryMessage, roomKey, psk.Bytes(), conn)
 		if err != nil {
 			log.Println("send room key:", err)
 		}
+	case "generate-keys":
+		myP = util.GeneratePrime()
+		myG = big.NewInt(2)
+		myPrivKey = util.GeneratePrivateKey(myP)
+		myPubKey = util.CalculatePublicKey(myP, myPrivKey, myG)
+		checkRoomKey()
 	}
 }
 
