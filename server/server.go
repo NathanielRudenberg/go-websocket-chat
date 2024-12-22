@@ -306,12 +306,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			delete(clients, client)
 			if client.IsKeyHub() {
-				// fmt.Println("read messages:", err)
-				log.Println("Key hub disconnected")
 				// Choose new key hub
 				chooseNewKeyHub()
-			} else {
-				log.Println("read: non kh client disconnected")
 			}
 			return
 		}
