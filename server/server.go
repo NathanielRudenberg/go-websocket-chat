@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"sync"
+	"time"
 	"websocket-chat/comm"
 	serverclient "websocket-chat/server/serverClient"
 	"websocket-chat/util"
@@ -90,54 +91,77 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func negotiateKeys(newClient *serverclient.Client, keyHubConnection *websocket.Conn) error {
-	// Tell hub and new client to exchange keys
-	if keyHub.DHDone {
-		log.Println("telling key hub to exchange keys")
-		keyHub.WriteJSON(comm.Message{Username: "server", Message: "ke", Type: comm.Info})
+	// Tell key hub and new client to exchange keys
+	// Receive P, G, public key from key hub
+	_, PBytes, err := keyHubConnection.ReadMessage()
+	if err != nil {
+		newError := errors.New("Error receiving P from key hub:" + err.Error())
+		newClient.Disconnect()
+		return newError
 	}
-	serverclient.SendCommand(keyHubConnection, "exchange-keys")
-	newClient.SendCommand("exchange-keys")
-	// Hub sends P and G to both clients
-	// Send P  and G to key hub
-	serverclient.WriteBinaryMessage(keyHubConnection, P.Bytes())
-	serverclient.WriteBinaryMessage(keyHubConnection, G.Bytes())
-	// Send P and G to new client
-	newClient.WriteBinaryMessage(P.Bytes())
-	newClient.WriteBinaryMessage(G.Bytes())
-	// Both calculate their private and public keys
+
+	_, GBytes, err := keyHubConnection.ReadMessage()
+	if err != nil {
+		newError := errors.New("Error receiving G from key hub:" + err.Error())
+		newClient.Disconnect()
+		return newError
+	}
+
+	_, keyHubPubKeyBytes, err := keyHubConnection.ReadMessage()
+	if err != nil {
+		newError := errors.New("Error receiving key hub's public key:" + err.Error())
+		newClient.Disconnect()
+		return newError
+	}
+
+	// Send P, G, key hub's public key to new client
+	err = newClient.WriteBinaryMessage(PBytes)
+	if err != nil {
+		newError := errors.New("Error sending P to new client:" + err.Error())
+		return newError
+	}
+
+	err = newClient.WriteBinaryMessage(GBytes)
+	if err != nil {
+		newError := errors.New("Error sending G to new client:" + err.Error())
+		return newError
+	}
+
+	err = newClient.WriteBinaryMessage(keyHubPubKeyBytes)
+	if err != nil {
+		newError := errors.New("Error sending key hub's public key to new client:" + err.Error())
+		return newError
+	}
+
 	// Each client sends its public key to the other
 	// Receive new client's public key
+
 	_, newClientPubKeyBytes, err := newClient.ReadMessage()
 	if err != nil {
 		newError := errors.New("Error receiving new client's public key:" + err.Error())
 		newClient.Disconnect()
 		return newError
 	}
-	newClientPubKey := new(big.Int).SetBytes(newClientPubKeyBytes)
-	// Receive key hub's public key
-	_, oldClientPubKeyBytes, err := keyHubConnection.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving key hub's public key:" + err.Error())
-		// keyHubConnection.Disconnect()
-		newClient.Disconnect()
-		return newError
-	}
-	oldClientPubKey := new(big.Int).SetBytes(oldClientPubKeyBytes)
-	// Send key hub's public key to new client
-	newClient.WriteBinaryMessage(oldClientPubKey.Bytes())
+
 	// Send new client's public key to key hub
-	serverclient.WriteBinaryMessage(keyHubConnection, newClientPubKey.Bytes())
+	serverclient.WriteBinaryMessage(keyHubConnection, newClientPubKeyBytes)
 	// Each client calculates the PSK
-	// Presumably, at this point, the key hub would send the shared room key to the new client. If it has one.
+
+	// Share room key with new client
 	serverclient.SendCommand(keyHubConnection, "share-room-key")
 	_, roomKey, err := keyHubConnection.ReadMessage()
 	if err != nil {
-		log.Println("kh room key recv:", err)
 		newError := errors.New("Error receiving room key from key hub:" + err.Error())
 		// keyHubConnection.Disconnect()
 		return newError
 	}
-	newClient.WriteJSON(comm.Message{Username: "server", Message: "rk", Data: roomKey, Type: comm.Info})
+
+	err = newClient.WriteBinaryMessage(roomKey)
+	if err != nil {
+		newError := errors.New("Error sending room key to new client:" + err.Error())
+		return newError
+	}
+	newClient.DHDone = true
 	return nil
 }
 
@@ -159,7 +183,11 @@ func handleKeyExchange(w http.ResponseWriter, r *http.Request) {
 	mu.Unlock()
 	_ = incomingClient
 
-	// negotiateKeys(incomingClient, conn)
+	err = negotiateKeys(incomingClient, conn)
+	if err != nil {
+		log.Println("handle key exchange:", err)
+		return
+	}
 }
 
 func handleJoin(w http.ResponseWriter, r *http.Request) {
@@ -186,13 +214,24 @@ func handleJoin(w http.ResponseWriter, r *http.Request) {
 		clientId := (*uuid.UUID)(joinMessage.Data)
 		clientIdString := clientId.String()
 		ids[clientIdString] = client
-		err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "join-chat", Type: comm.Command})
-		if err != nil {
-			log.Println("handle join: send join chat command:", err)
-			delete(ids, clientIdString)
-			return
+		if keyHub == nil {
+			// This client is the key hub
+			err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "kh-join-done", Type: comm.Info})
+			if err != nil {
+				log.Println("handle join: send join chat command:", err)
+				delete(ids, clientIdString)
+				return
+			}
+			ids[clientIdString].Conn = nil
+		} else {
+			// This client is not the key hub
+			err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "cl", Type: comm.Info})
+			if err != nil {
+				log.Println("handle join: send join chat command:", err)
+				delete(ids, clientIdString)
+				return
+			}
 		}
-		ids[clientIdString].Conn = nil
 	}
 
 	// If there is a key hub, do key exchange
@@ -200,6 +239,18 @@ func handleJoin(w http.ResponseWriter, r *http.Request) {
 		exchangeKeys := comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command}
 		messageEvent := MessageEvent{message: exchangeKeys, recipient: keyHub}
 		broadcast <- messageEvent
+
+		// Wait for client to finish key exchange
+		// This is done because the connection will close if this function
+		// returns. If it returns before the key exchange is done, the client
+		// will not be able to finish the key exchange
+		for {
+			if client.DHDone {
+				return
+			} else {
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
 	}
 }
 

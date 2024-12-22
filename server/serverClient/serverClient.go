@@ -59,3 +59,7 @@ func SendCommand(conn *websocket.Conn, command string) error {
 func WriteBinaryMessage(conn *websocket.Conn, data []byte) error {
 	return conn.WriteMessage(websocket.BinaryMessage, data)
 }
+
+func ReadMessage(conn *websocket.Conn) (messageType int, p []byte, err error) {
+	return conn.ReadMessage()
+}
