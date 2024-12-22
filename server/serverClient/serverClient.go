@@ -36,7 +36,7 @@ func (C *Client) SendCommand(command string) error {
 	return C.WriteJSON(comm.Message{Username: "server", Message: command, Type: comm.Command})
 }
 
-func (C *Client) SendInfo(info string) error {
+func (C *Client) SendInfo(info string, data []byte) error {
 	return C.WriteJSON(comm.Message{Username: "server", Message: info, Type: comm.Info})
 }
 
@@ -50,4 +50,16 @@ func (C *Client) SetIsKeyHub(isKeyHub bool) {
 
 func (C *Client) IsKeyHub() bool {
 	return C.isKeyHub
+}
+
+func SendCommand(conn *websocket.Conn, command string) error {
+	return conn.WriteJSON(comm.Message{Username: "server", Message: command, Type: comm.Command})
+}
+
+func WriteBinaryMessage(conn *websocket.Conn, data []byte) error {
+	return conn.WriteMessage(websocket.BinaryMessage, data)
+}
+
+func ReadMessage(conn *websocket.Conn) (messageType int, p []byte, err error) {
+	return conn.ReadMessage()
 }

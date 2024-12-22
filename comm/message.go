@@ -13,7 +13,10 @@ type Message struct {
 }
 
 func (msg Message) String() string {
-	return fmt.Sprintf("%s: %s", msg.Username, msg.Message)
+	if msg.Type == Text {
+		return fmt.Sprintf("%s: %s", msg.Username, msg.Message)
+	}
+	return fmt.Sprintf("{%s %s %d %s}", msg.Username, msg.Message, msg.Type, msg.Data)
 }
 
 func (msg *Message) Print(psk []byte) error {
@@ -30,4 +33,11 @@ const (
 	Text = iota
 	Command
 	Info
+)
+
+// Valid command names
+const (
+	ExchangeKeys = iota
+	ShareRoomKey
+	GenerateKeys
 )
