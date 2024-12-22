@@ -61,12 +61,6 @@ func handleCommand(command *comm.Message, conn *websocket.Conn) {
 		hostName := "localhost"
 		hostPort := 8080
 		go shareKeys(&hostName, &hostPort)
-	// case "share-room-key":
-	// 	checkRoomKey()
-	// 	err := sendEncryptedMessage(websocket.BinaryMessage, roomKey, psk.Bytes(), conn)
-	// 	if err != nil {
-	// 		log.Println("send room key:", err)
-	// 	}
 	case "generate-keys":
 		P = util.GeneratePrime()
 		G = big.NewInt(2)
@@ -279,12 +273,12 @@ func main() {
 			}
 
 			if msg.Type == comm.Text {
-				// err := msg.Print(roomKey)
-				fmt.Println(msg)
-				// if err != nil {
-				// 	log.Println("decryption:", err)
-				// 	continue
-				// }
+				err := msg.Print(roomKey)
+				// fmt.Println(msg)
+				if err != nil {
+					log.Println("decryption:", err)
+					continue
+				}
 			}
 
 			if msg.Type == comm.Command {
@@ -304,7 +298,8 @@ func main() {
 			log.Println("marshal uuid:", err)
 			return
 		}
-		broadcast <- comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary}
+		firstJoinMessage := comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary}
+		broadcast <- firstJoinMessage
 		for {
 			messageInput, _ := reader.ReadString('\n')
 			msgLength := len(messageInput)
@@ -313,14 +308,14 @@ func main() {
 				continue
 			}
 			// Encrypt the message
-			// encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
-			// if err != nil {
-			// 	log.Println("encryption:", err)
-			// 	continue
-			// }
+			encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
+			if err != nil {
+				log.Println("encryption:", err)
+				continue
+			}
 
-			// writeMsg := comm.Message{Username: username, Message: encryptedMessage}
-			writeMsg := comm.Message{Username: username, Message: messageInput, Type: comm.Text}
+			writeMsg := comm.Message{Username: username, Message: encryptedMessage}
+			// writeMsg := comm.Message{Username: username, Message: messageInput, Type: comm.Text}
 			broadcast <- writeMsg
 			// select {
 			// case <-done:
