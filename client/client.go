@@ -22,6 +22,8 @@ import (
 var (
 	username                    string
 	P, G, privateKey, publicKey *big.Int
+	hostName                    *string
+	hostPort                    *int
 	roomKey                     []byte
 	id                          = uuid.New()
 )
@@ -58,9 +60,7 @@ func handleCommand(command *comm.Message, conn *websocket.Conn) {
 	switch command.Message {
 	case "exchange-keys":
 		// Only the key hub should receive this command
-		hostName := "localhost"
-		hostPort := 8080
-		go shareKeys(&hostName, &hostPort)
+		go shareKeys(hostName, hostPort)
 	case "generate-keys":
 		P = util.GeneratePrime()
 		G = big.NewInt(2)
@@ -126,10 +126,9 @@ func doKeyExchange(conn *websocket.Conn) error {
 
 func shareKeys(hostName *string, hostPort *int) error {
 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/key-exchange"}
-	conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Printf("handshake failed with status %d", response.StatusCode)
-		log.Fatal("dial:", err)
+		log.Fatal(err)
 		return err
 	}
 	defer conn.Close()
@@ -182,10 +181,9 @@ func initJoin(hostName *string, hostPort *int) error {
 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/connect"}
 	// log.Printf("connecting to %s", u.String())
 	log.Printf("connecting to %s:%d", *hostName, *hostPort)
-	conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Printf("handshake failed with status %d", response.StatusCode)
-		log.Fatal("dial:", err)
+		log.Fatal(err)
 		return err
 	}
 	defer conn.Close()
@@ -231,8 +229,8 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	hostName := flag.String("host", "localhost", "Server Hostname")
-	hostPort := flag.Int("port", 8080, "Server Port")
+	hostName = flag.String("host", "localhost", "Server Hostname")
+	hostPort = flag.Int("port", 8080, "Server Port")
 	flag.Parse()
 
 	// go handleMessages()
