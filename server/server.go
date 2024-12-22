@@ -41,14 +41,6 @@ var (
 )
 
 func main() {
-	// Each connection only supports one goroutine for Read and one for Write
-	// Client connects to "connect" endpoint (functions as a key exchange request)
-
-	// ??? Key hub opens new connection to server, exchanges keys with new client on that connection, closes the connection
-	// Client performs key exchange and whatever with key hub
-	// Client connects to chat endpoint (currently /ws)
-	// Profit????? I guess?
-
 	// Hold a queue of incoming clients
 	// This queue might need a mutex, idk yet
 	// When a client tries to connect: lock the mutex, add it to the queue, unlock the mutex
