@@ -12,6 +12,14 @@
             "program": "${workspaceRoot}/client"
         },
         {
+            "name": "Remote Client",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceRoot}/client",
+            "args": ["-host", "wings2.craftingwitdaboys.xyz", "-port", "8081"]
+        },
+        {
             "name": "server",
             "type": "go",
             "request": "launch",
