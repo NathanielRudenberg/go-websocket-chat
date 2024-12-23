@@ -231,15 +231,15 @@ func main() {
 
 	hostName = flag.String("host", "localhost", "Server Hostname")
 	hostPort = flag.Int("port", 8080, "Server Port")
+	user := flag.String("username", "PabloDebug", "Username")
 	flag.Parse()
+
+	username = *user
 
 	// go handleMessages()
 
 	// Get username from user
-	fmt.Print("Enter your username: ")
 	reader := bufio.NewReader(os.Stdin)
-	username, _ = reader.ReadString('\n')
-	username = username[:len(username)-1]
 	// username := "PabloDebug"
 
 	err := initJoin(hostName, hostPort)
