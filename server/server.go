@@ -109,6 +109,7 @@ func negotiateKeys(newClient *serverclient.Client, keyHubConnection *websocket.C
 	// Send P, G, key hub's public key to new client
 	err = newClient.WriteBinaryMessage(PBytes)
 	if err != nil {
+		newClient.Disconnect()
 		newError := errors.New("Error sending P to new client:" + err.Error())
 		return newError
 	}
@@ -168,12 +169,15 @@ func handleKeyExchange(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	var incomingClient *serverclient.Client
 	for client := range incomingClients {
-		incomingClient = client
-		delete(incomingClients, client)
-		break
+		if client.Conn == nil {
+			delete(incomingClients, client)
+		} else {
+			incomingClient = client
+			delete(incomingClients, client)
+			break
+		}
 	}
 	mu.Unlock()
-	_ = incomingClient
 
 	err = negotiateKeys(incomingClient, conn)
 	if err != nil {
@@ -199,6 +203,7 @@ func handleJoin(w http.ResponseWriter, r *http.Request) {
 	err = client.Conn.ReadJSON(&joinMessage)
 	if err != nil {
 		log.Println("handle join: get id:", err)
+		client.Disconnect()
 		return
 	}
 
@@ -259,6 +264,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	err = conn.ReadJSON(&joinMessage)
 	if err != nil {
 		log.Println("handle connections: get id:", err)
+		conn.Close()
 		return
 	}
 	var clientId *uuid.UUID
@@ -297,6 +303,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			delete(clients, client)
+			delete(ids, clientIdString)
 			if client.IsKeyHub() {
 				// Choose new key hub
 				chooseNewKeyHub()
