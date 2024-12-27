@@ -15,6 +15,7 @@ import (
 	"websocket-chat/comm"
 	"websocket-chat/util"
 
+	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -256,7 +257,7 @@ func main() {
 		log.Fatal("dial:", err)
 	}
 	defer conn.Close()
-	log.Println("Joined chat")
+	log.Print("Joined chat\n\n")
 
 	done := make(chan struct{})
 	connectionHandler := func() {
@@ -289,6 +290,8 @@ func main() {
 		}
 	}
 
+	green := color.New(color.FgGreen).SprintFunc()
+
 	inputHandler := func() {
 		// First message to send upon connection is the uuid
 		uuidBinary, err := id.MarshalBinary()
@@ -300,11 +303,13 @@ func main() {
 		broadcast <- firstJoinMessage
 		for {
 			messageInput, _ := reader.ReadString('\n')
+			util.ClearLine()
 			msgLength := len(messageInput)
 			messageInput = messageInput[:msgLength-1]
 			if messageInput == "" {
 				continue
 			}
+			fmt.Printf("%s: %s\n", green("You"), messageInput)
 			// Encrypt the message
 			encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
 			if err != nil {

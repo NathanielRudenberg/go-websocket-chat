@@ -9,9 +9,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 )
+
+// Clear the current line in the terminal after pressing return
+func ClearLine() {
+	fmt.Print("\033[1A\033[K")
+}
 
 func Encrypt(plaintext []byte, key []byte) (string, error) {
 	// key, _ := hex.DecodeString(keyString) // Convert the key to bytes
