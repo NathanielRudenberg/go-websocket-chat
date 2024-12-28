@@ -21,10 +21,12 @@ func handleSendMessage(key tcell.Key) {
 	switch key {
 	case tcell.KeyEnter:
 		// send message
-		connectionservice.SendChat(message)
-		yourMessage := fmt.Sprintf("[green]You[white]: %s", message)
-		messageChannel <- yourMessage
-		chatMessageInput.SetText("")
+		if message != "" {
+			connectionservice.SendChat(message)
+			yourMessage := fmt.Sprintf("[green]You[white]: %s", message)
+			messageChannel <- yourMessage
+			chatMessageInput.SetText("")
+		}
 	}
 }
 
