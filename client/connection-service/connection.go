@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"os"
-	"os/signal"
 	"time"
 	messageservice "websocket-chat/client/message-service"
 	"websocket-chat/comm"
@@ -88,9 +86,9 @@ func initJoin(hostName *string, hostPort *int) error {
 	return errors.New("could not join chat")
 }
 
-func ConnectToChatServer(messageChannel *chan string) {
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
+func ConnectToChatServer(chatChannel *chan string, closeChannel *chan struct{}) {
+	// interrupt := make(chan os.Signal, 1)
+	// signal.Notify(interrupt, os.Interrupt)
 
 	hostName = flag.String("host", "localhost", "Server Hostname")
 	hostPort = flag.Int("port", 8080, "Server Port")
@@ -139,7 +137,7 @@ func ConnectToChatServer(messageChannel *chan string) {
 					log.Println("decryption:", err)
 					continue
 				}
-				*messageChannel <- decryptedMessage
+				*chatChannel <- decryptedMessage
 			}
 
 			if msg.Type == comm.Command {
@@ -152,8 +150,6 @@ func ConnectToChatServer(messageChannel *chan string) {
 		}
 	}
 
-	// green := color.New(color.FgGreen).SprintFunc()
-
 	inputHandler := func() {
 		// First message to send upon connection is the uuid
 		uuidBinary, err := id.MarshalBinary()
@@ -165,35 +161,7 @@ func ConnectToChatServer(messageChannel *chan string) {
 		broadcast <- firstJoinMessage
 		for {
 			chatMessage := <-chatInput
-
-			// messageInput, _ := reader.ReadString('\n')
-			// util.ClearLine()
-			// msgLength := len(messageInput)
-			// messageInput = messageInput[:msgLength-1]
-			// if messageInput == "" {
-			// 	continue
-			// }
-			// fmt.Printf("%s: %s\n", green("You"), messageInput)
-
-			// Encrypt the message
-			// encryptedMessage, err := util.Encrypt([]byte(messageInput), util.GetRoomKey())
-			// if err != nil {
-			// 	log.Println("encryption:", err)
-			// 	continue
-			// }
-
-			// writeMsg := comm.Message{Username: username, Message: encryptedMessage}
-			// // writeMsg := comm.Message{Username: username, Message: messageInput, Type: comm.Text}
-			// broadcast <- writeMsg
-
 			BroadcastMessage(chatMessage)
-
-			// select {
-			// case <-done:
-			// 	log.Println("done")
-			// 	return
-			// case <-time.After(time.Millisecond):
-			// }
 		}
 	}
 
@@ -211,8 +179,8 @@ func ConnectToChatServer(messageChannel *chan string) {
 				log.Println("write:", err)
 				return
 			}
-		case <-interrupt:
-			log.Println("interrupt")
+		case <-*closeChannel:
+			log.Println("close")
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
 			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))

@@ -13,7 +13,8 @@ var (
 	message          string
 	app              *tview.Application = tview.NewApplication()
 	chatMessageInput *tview.InputField  = tview.NewInputField()
-	messageChannel                      = make(chan string)
+	chatChannel                         = make(chan string)
+	closeChannel                        = make(chan struct{})
 )
 
 func handleSendMessage(key tcell.Key) {
@@ -24,7 +25,7 @@ func handleSendMessage(key tcell.Key) {
 		if message != "" {
 			connectionservice.SendChat(message)
 			yourMessage := fmt.Sprintf("[green]You[white]: %s", message)
-			messageChannel <- yourMessage
+			chatChannel <- yourMessage
 			chatMessageInput.SetText("")
 		}
 	}
@@ -44,7 +45,7 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		connectionservice.ConnectToChatServer(&messageChannel)
+		connectionservice.ConnectToChatServer(&chatChannel, &closeChannel)
 	}()
 
 	chatWindow := tview.NewTextView().
@@ -54,7 +55,7 @@ func main() {
 
 	go func() {
 		for {
-			message := <-messageChannel
+			message := <-chatChannel
 			fmt.Fprintf(chatWindow, "%s\n\n", message)
 		}
 	}()
@@ -78,6 +79,9 @@ func main() {
 	if err := app.SetRoot(mainView, true).EnableMouse(false).Run(); err != nil {
 		panic(err)
 	}
+
+	// Close the connection when the user exits the chat
+	closeChannel <- struct{}{}
 
 	// Wait for the goroutine to finish when the user exits the chat
 	wg.Wait()
