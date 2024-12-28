@@ -41,14 +41,6 @@ var (
 )
 
 func main() {
-	// Hold a queue of incoming clients
-	// This queue might need a mutex, idk yet
-	// When a client tries to connect: lock the mutex, add it to the queue, unlock the mutex
-	// Open a new connection from the key hub
-	// The key hub locks the mutex, pulls a client from the queue, unlocks the mutex, exchanges keys with the client, then shares the room key
-	// The key hub closes the connection
-	// The client connects to the chat endpoint, now able to send encrypted messages
-
 	hostPort := flag.Int("port", 8080, "Server Port")
 	flag.Parse()
 	http.HandleFunc("/", homePage)
@@ -350,40 +342,3 @@ func handleMessages() {
 		}
 	}
 }
-
-// func listenMessages(conn *websocket.Conn, client *serverclient.Client) {
-// 	var msg comm.Message
-// 	// if client.isKeyHub {
-// 	// 	log.Println("Reading message from key hub")
-// 	// } else {
-// 	// 	log.Println("Reading message from nonhub")
-// 	// }
-// 	err := conn.ReadJSON(&msg)
-// 	if err != nil {
-// 		delete(clients, client)
-// 		if client.IsKeyHub() {
-// 			fmt.Println("read messages:", err)
-// 			log.Println("Key hub disconnected")
-// 			// Choose new key hub
-// 			// chooseNewKeyHub()
-// 		} else {
-// 			log.Println("read: non kh client disconnected")
-// 		}
-// 		return
-// 	}
-
-// 	if msg.Type == comm.Text {
-// 		// if client.isKeyHub {
-// 		// 	log.Println("Message received:", msg)
-// 		// }
-// 		messageEvent := MessageEvent{message: msg, client: client}
-// 		broadcast <- messageEvent
-// 	}
-
-// 	if msg.Type == comm.Info {
-// 		if msg.Message == "ke" {
-// 			log.Println("Key hub needs to do a key exchange")
-// 			client.DHDone = false
-// 		}
-// 	}
-// }
