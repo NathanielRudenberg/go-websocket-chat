@@ -2,16 +2,15 @@ package main
 
 import (
 	"bufio"
-	"crypto/rand"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
-	"math/big"
 	"net/url"
 	"os"
 	"os/signal"
 	"time"
+	messageservice "websocket-chat/client/message-service"
 	"websocket-chat/comm"
 	"websocket-chat/util"
 
@@ -21,162 +20,162 @@ import (
 )
 
 var (
-	username                    string
-	P, G, privateKey, publicKey *big.Int
-	hostName                    *string
-	hostPort                    *int
-	roomKey                     []byte
-	id                          = uuid.New()
+	username string
+	// P, G, privateKey, publicKey *big.Int
+	// roomKey                     []byte
+	hostName *string
+	hostPort *int
+	id       = uuid.New()
 )
 
-func checkRoomKey() {
-	if roomKey == nil {
-		roomKey = make([]byte, 32)
-		_, err := rand.Read(roomKey)
-		if err != nil {
-			log.Println("room key:", err)
-		}
-	}
-}
+// func checkRoomKey() {
+// 	if roomKey == nil {
+// 		roomKey = make([]byte, 32)
+// 		_, err := rand.Read(roomKey)
+// 		if err != nil {
+// 			log.Println("room key:", err)
+// 		}
+// 	}
+// }
 
-func sendEncryptedMessage(messageType int, data []byte, key []byte, conn *websocket.Conn) error {
-	encryptedMessage, err := util.Encrypt(data, key)
-	if err != nil {
-		return err
-	}
-	return conn.WriteMessage(messageType, []byte(encryptedMessage))
-}
+// func sendEncryptedMessage(messageType int, data []byte, key []byte, conn *websocket.Conn) error {
+// 	encryptedMessage, err := util.Encrypt(data, key)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return conn.WriteMessage(messageType, []byte(encryptedMessage))
+// }
 
-func handleInfo(info *comm.Message, conn *websocket.Conn) {
-	switch info.Message {
-	case "ke":
-		err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
-		if err != nil {
-			log.Println("send info:", err)
-		}
-	}
-}
+// func handleInfo(info *comm.Message, conn *websocket.Conn) {
+// 	switch info.Message {
+// 	case "ke":
+// 		err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
+// 		if err != nil {
+// 			log.Println("send info:", err)
+// 		}
+// 	}
+// }
 
-func handleCommand(command *comm.Message, conn *websocket.Conn) {
-	switch command.Message {
-	case "exchange-keys":
-		// Only the key hub should receive this command
-		go shareKeys(hostName, hostPort)
-	case "generate-keys":
-		P = util.GeneratePrime()
-		G = big.NewInt(2)
-		privateKey = util.GeneratePrivateKey(P)
-		publicKey = util.CalculatePublicKey(P, privateKey, G)
-		checkRoomKey()
-	case "join-chat":
+// func handleCommand(command *comm.Message, conn *websocket.Conn) {
+// 	switch command.Message {
+// 	case "exchange-keys":
+// 		// Only the key hub should receive this command
+// 		go shareKeys(hostName, hostPort)
+// 	case "generate-keys":
+// 		P = util.GeneratePrime()
+// 		G = big.NewInt(2)
+// 		privateKey = util.GeneratePrivateKey(P)
+// 		publicKey = util.CalculatePublicKey(P, privateKey, G)
+// 		checkRoomKey()
+// 	case "join-chat":
 
-	}
-}
+// 	}
+// }
 
-func doKeyExchange(conn *websocket.Conn) error {
-	// Receive P, G, key hub public key from server
-	_, Pbytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving P from server:" + err.Error())
-		return newError
-	}
-	P = new(big.Int).SetBytes(Pbytes)
+// func doKeyExchange(conn *websocket.Conn) error {
+// 	// Receive P, G, key hub public key from server
+// 	_, Pbytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving P from server:" + err.Error())
+// 		return newError
+// 	}
+// 	P = new(big.Int).SetBytes(Pbytes)
 
-	_, Gbytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving G from server:" + err.Error())
-		return newError
-	}
-	G = new(big.Int).SetBytes(Gbytes)
+// 	_, Gbytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving G from server:" + err.Error())
+// 		return newError
+// 	}
+// 	G = new(big.Int).SetBytes(Gbytes)
 
-	_, keyHubPubKeyBytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving key hub's public key:" + err.Error())
-		return newError
-	}
-	keyHubPubKey := new(big.Int).SetBytes(keyHubPubKeyBytes)
+// 	_, keyHubPubKeyBytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving key hub's public key:" + err.Error())
+// 		return newError
+// 	}
+// 	keyHubPubKey := new(big.Int).SetBytes(keyHubPubKeyBytes)
 
-	// Calculate private key
-	privateKey = util.GeneratePrivateKey(P)
-	// Calculate public key
-	publicKey = util.CalculatePublicKey(P, privateKey, G)
+// 	// Calculate private key
+// 	privateKey = util.GeneratePrivateKey(P)
+// 	// Calculate public key
+// 	publicKey = util.CalculatePublicKey(P, privateKey, G)
 
-	// Send public key to server
-	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
-	if err != nil {
-		newError := errors.New("Error sending public key to server:" + err.Error())
-		return newError
-	}
-	// Calculate PSK with server pub key
-	psk := util.CalculateSharedSecret(P, privateKey, keyHubPubKey)
+// 	// Send public key to server
+// 	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error sending public key to server:" + err.Error())
+// 		return newError
+// 	}
+// 	// Calculate PSK with server pub key
+// 	psk := util.CalculateSharedSecret(P, privateKey, keyHubPubKey)
 
-	// Receive room key from server
-	_, encryptedRoomKeyBytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving room key from server:" + err.Error())
-		return newError
-	}
+// 	// Receive room key from server
+// 	_, encryptedRoomKeyBytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving room key from server:" + err.Error())
+// 		return newError
+// 	}
 
-	roomKey, err = util.Decrypt(string(encryptedRoomKeyBytes), psk.Bytes())
-	if err != nil {
-		newError := errors.New("Error decrypting room key:" + err.Error())
-		return newError
-	}
-	return nil
-}
+// 	roomKey, err = util.Decrypt(string(encryptedRoomKeyBytes), psk.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error decrypting room key:" + err.Error())
+// 		return newError
+// 	}
+// 	return nil
+// }
 
-func shareKeys(hostName *string, hostPort *int) error {
-	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/key-exchange"}
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatal(err)
-		return err
-	}
-	defer conn.Close()
+// func shareKeys(hostName *string, hostPort *int) error {
+// 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/key-exchange"}
+// 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 		return err
+// 	}
+// 	defer conn.Close()
 
-	// Send P, G, public key to server
-	err = conn.WriteMessage(websocket.BinaryMessage, P.Bytes())
-	if err != nil {
-		newError := errors.New("Error sending P to server:" + err.Error())
-		return newError
-	}
+// 	// Send P, G, public key to server
+// 	err = conn.WriteMessage(websocket.BinaryMessage, P.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error sending P to server:" + err.Error())
+// 		return newError
+// 	}
 
-	err = conn.WriteMessage(websocket.BinaryMessage, G.Bytes())
-	if err != nil {
-		newError := errors.New("Error sending G to server:" + err.Error())
-		return newError
-	}
+// 	err = conn.WriteMessage(websocket.BinaryMessage, G.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error sending G to server:" + err.Error())
+// 		return newError
+// 	}
 
-	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
-	if err != nil {
-		newError := errors.New("Error sending public key to server:" + err.Error())
-		return newError
-	}
+// 	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error sending public key to server:" + err.Error())
+// 		return newError
+// 	}
 
-	// Receive other client's public key
-	_, clientPubKeyBytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving client's public key:" + err.Error())
-		return newError
-	}
-	clientPubKey := new(big.Int).SetBytes(clientPubKeyBytes)
+// 	// Receive other client's public key
+// 	_, clientPubKeyBytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving client's public key:" + err.Error())
+// 		return newError
+// 	}
+// 	clientPubKey := new(big.Int).SetBytes(clientPubKeyBytes)
 
-	// Calculate PSK
-	psk := util.CalculateSharedSecret(P, privateKey, clientPubKey)
+// 	// Calculate PSK
+// 	psk := util.CalculateSharedSecret(P, privateKey, clientPubKey)
 
-	// Send encrypted room key
-	encryptedRoomKey, err := util.Encrypt(roomKey, psk.Bytes())
-	if err != nil {
-		newError := errors.New("Error encrypting room key:" + err.Error())
-		return newError
-	}
-	err = conn.WriteMessage(websocket.BinaryMessage, []byte(encryptedRoomKey))
-	if err != nil {
-		newError := errors.New("Error sending room key to server:" + err.Error())
-		return newError
-	}
-	return nil
-}
+// 	// Send encrypted room key
+// 	encryptedRoomKey, err := util.Encrypt(roomKey, psk.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error encrypting room key:" + err.Error())
+// 		return newError
+// 	}
+// 	err = conn.WriteMessage(websocket.BinaryMessage, []byte(encryptedRoomKey))
+// 	if err != nil {
+// 		newError := errors.New("Error sending room key to server:" + err.Error())
+// 		return newError
+// 	}
+// 	return nil
+// }
 
 func initJoin(hostName *string, hostPort *int) error {
 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/connect"}
@@ -214,7 +213,7 @@ func initJoin(hostName *string, hostPort *int) error {
 			return nil
 		case "cl":
 			// Should only receive if not key hub
-			err := doKeyExchange(conn)
+			err := util.DoKeyExchange(conn)
 			if err != nil {
 				newError := errors.New("Error doing key exchange:" + err.Error())
 				return newError
@@ -257,6 +256,7 @@ func main() {
 		log.Fatal("dial:", err)
 	}
 	defer conn.Close()
+	messageservice.SetHostInfo(hostName, hostPort)
 	log.Print("Joined chat\n\n")
 
 	done := make(chan struct{})
@@ -272,7 +272,7 @@ func main() {
 			}
 
 			if msg.Type == comm.Text {
-				err := msg.Print(roomKey)
+				err := msg.Print(util.GetRoomKey())
 				// fmt.Println(msg)
 				if err != nil {
 					log.Println("decryption:", err)
@@ -281,11 +281,11 @@ func main() {
 			}
 
 			if msg.Type == comm.Command {
-				handleCommand(&msg, conn)
+				messageservice.HandleCommand(&msg)
 			}
 
 			if msg.Type == comm.Info {
-				handleInfo(&msg, conn)
+				messageservice.HandleInfo(&msg, conn)
 			}
 		}
 	}
@@ -311,7 +311,7 @@ func main() {
 			}
 			fmt.Printf("%s: %s\n", green("You"), messageInput)
 			// Encrypt the message
-			encryptedMessage, err := util.Encrypt([]byte(messageInput), roomKey)
+			encryptedMessage, err := util.Encrypt([]byte(messageInput), util.GetRoomKey())
 			if err != nil {
 				log.Println("encryption:", err)
 				continue
