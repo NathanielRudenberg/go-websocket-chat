@@ -1,367 +1,68 @@
 package main
 
 import (
-	"bufio"
-	"errors"
-	"flag"
 	"fmt"
-	"log"
-	"net/url"
-	"os"
-	"os/signal"
-	"time"
-	messageservice "websocket-chat/client/message-service"
+	"sync"
+	connectionservice "websocket-chat/client/connection-service"
 	"websocket-chat/comm"
-	"websocket-chat/util"
 
-	"github.com/fatih/color"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 var (
-	username string
-	// P, G, privateKey, publicKey *big.Int
-	// roomKey                     []byte
-	hostName *string
-	hostPort *int
-	id       = uuid.New()
+	message          string
+	testChatText     string            = "Juan: Hello, this is a test message\n\nPablo: pablo\n\nGomez: Estan chismeando?\n\nJuan: No, estamos trabajando\n\nGomez: Seguro?\n\nJuan: Si, seguro. Pablo, thoughts?\n\nPablo: Pablo"
+	chatMessageInput *tview.InputField = tview.NewInputField()
 )
 
-// func checkRoomKey() {
-// 	if roomKey == nil {
-// 		roomKey = make([]byte, 32)
-// 		_, err := rand.Read(roomKey)
-// 		if err != nil {
-// 			log.Println("room key:", err)
-// 		}
-// 	}
-// }
-
-// func sendEncryptedMessage(messageType int, data []byte, key []byte, conn *websocket.Conn) error {
-// 	encryptedMessage, err := util.Encrypt(data, key)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return conn.WriteMessage(messageType, []byte(encryptedMessage))
-// }
-
-// func handleInfo(info *comm.Message, conn *websocket.Conn) {
-// 	switch info.Message {
-// 	case "ke":
-// 		err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
-// 		if err != nil {
-// 			log.Println("send info:", err)
-// 		}
-// 	}
-// }
-
-// func handleCommand(command *comm.Message, conn *websocket.Conn) {
-// 	switch command.Message {
-// 	case "exchange-keys":
-// 		// Only the key hub should receive this command
-// 		go shareKeys(hostName, hostPort)
-// 	case "generate-keys":
-// 		P = util.GeneratePrime()
-// 		G = big.NewInt(2)
-// 		privateKey = util.GeneratePrivateKey(P)
-// 		publicKey = util.CalculatePublicKey(P, privateKey, G)
-// 		checkRoomKey()
-// 	case "join-chat":
-
-// 	}
-// }
-
-// func doKeyExchange(conn *websocket.Conn) error {
-// 	// Receive P, G, key hub public key from server
-// 	_, Pbytes, err := conn.ReadMessage()
-// 	if err != nil {
-// 		newError := errors.New("Error receiving P from server:" + err.Error())
-// 		return newError
-// 	}
-// 	P = new(big.Int).SetBytes(Pbytes)
-
-// 	_, Gbytes, err := conn.ReadMessage()
-// 	if err != nil {
-// 		newError := errors.New("Error receiving G from server:" + err.Error())
-// 		return newError
-// 	}
-// 	G = new(big.Int).SetBytes(Gbytes)
-
-// 	_, keyHubPubKeyBytes, err := conn.ReadMessage()
-// 	if err != nil {
-// 		newError := errors.New("Error receiving key hub's public key:" + err.Error())
-// 		return newError
-// 	}
-// 	keyHubPubKey := new(big.Int).SetBytes(keyHubPubKeyBytes)
-
-// 	// Calculate private key
-// 	privateKey = util.GeneratePrivateKey(P)
-// 	// Calculate public key
-// 	publicKey = util.CalculatePublicKey(P, privateKey, G)
-
-// 	// Send public key to server
-// 	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
-// 	if err != nil {
-// 		newError := errors.New("Error sending public key to server:" + err.Error())
-// 		return newError
-// 	}
-// 	// Calculate PSK with server pub key
-// 	psk := util.CalculateSharedSecret(P, privateKey, keyHubPubKey)
-
-// 	// Receive room key from server
-// 	_, encryptedRoomKeyBytes, err := conn.ReadMessage()
-// 	if err != nil {
-// 		newError := errors.New("Error receiving room key from server:" + err.Error())
-// 		return newError
-// 	}
-
-// 	roomKey, err = util.Decrypt(string(encryptedRoomKeyBytes), psk.Bytes())
-// 	if err != nil {
-// 		newError := errors.New("Error decrypting room key:" + err.Error())
-// 		return newError
-// 	}
-// 	return nil
-// }
-
-// func shareKeys(hostName *string, hostPort *int) error {
-// 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/key-exchange"}
-// 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 		return err
-// 	}
-// 	defer conn.Close()
-
-// 	// Send P, G, public key to server
-// 	err = conn.WriteMessage(websocket.BinaryMessage, P.Bytes())
-// 	if err != nil {
-// 		newError := errors.New("Error sending P to server:" + err.Error())
-// 		return newError
-// 	}
-
-// 	err = conn.WriteMessage(websocket.BinaryMessage, G.Bytes())
-// 	if err != nil {
-// 		newError := errors.New("Error sending G to server:" + err.Error())
-// 		return newError
-// 	}
-
-// 	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
-// 	if err != nil {
-// 		newError := errors.New("Error sending public key to server:" + err.Error())
-// 		return newError
-// 	}
-
-// 	// Receive other client's public key
-// 	_, clientPubKeyBytes, err := conn.ReadMessage()
-// 	if err != nil {
-// 		newError := errors.New("Error receiving client's public key:" + err.Error())
-// 		return newError
-// 	}
-// 	clientPubKey := new(big.Int).SetBytes(clientPubKeyBytes)
-
-// 	// Calculate PSK
-// 	psk := util.CalculateSharedSecret(P, privateKey, clientPubKey)
-
-// 	// Send encrypted room key
-// 	encryptedRoomKey, err := util.Encrypt(roomKey, psk.Bytes())
-// 	if err != nil {
-// 		newError := errors.New("Error encrypting room key:" + err.Error())
-// 		return newError
-// 	}
-// 	err = conn.WriteMessage(websocket.BinaryMessage, []byte(encryptedRoomKey))
-// 	if err != nil {
-// 		newError := errors.New("Error sending room key to server:" + err.Error())
-// 		return newError
-// 	}
-// 	return nil
-// }
-
-func initJoin(hostName *string, hostPort *int) error {
-	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/connect"}
-	// log.Printf("connecting to %s", u.String())
-	log.Printf("connecting to %s:%d", *hostName, *hostPort)
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatal(err)
-		return err
+func handleSendMessage(key tcell.Key) {
+	fmt.Println("key:", key)
+	switch key {
+	case tcell.KeyEnter:
+		// send message
+		connectionservice.SendChat(message)
+		chatMessageInput.SetText("")
 	}
-	defer conn.Close()
+}
 
-	// Send join message
-	uuidBinary, err := id.MarshalBinary()
-	if err != nil {
-		log.Println("marshal uuid:", err)
-		return err
-	}
-	err = conn.WriteJSON(comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary})
-	if err != nil {
-		log.Println("send join:", err)
-		return err
-	}
-
-	var msg comm.Message
-	err = conn.ReadJSON(&msg)
-	if err != nil {
-		log.Println("read join chat command:", err)
-		return err
-	}
-	if msg.Type == comm.Info {
-		switch msg.Message {
-		case "kh-join-done":
-			// Should only receive if key hub
-			return nil
-		case "cl":
-			// Should only receive if not key hub
-			err := util.DoKeyExchange(conn)
-			if err != nil {
-				newError := errors.New("Error doing key exchange:" + err.Error())
-				return newError
-			}
-			return nil
-		}
-	}
-	return errors.New("could not join chat")
+func handleChangeInput(txt string) {
+	message = txt
 }
 
 func main() {
-	broadcast := make(chan comm.Message)
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	messageChannel := make(chan comm.Message)
 
-	hostName = flag.String("host", "localhost", "Server Hostname")
-	hostPort = flag.Int("port", 8080, "Server Port")
-	user := flag.String("username", "PabloDebug", "Username")
-	flag.Parse()
+	go func() {
+		defer wg.Done()
+		connectionservice.ConnectToChatServer(&messageChannel)
+	}()
 
-	username = *user
+	// app := tview.NewApplication()
+	// placeholder := tview.NewTextView()
 
-	// go handleMessages()
+	// chatMessageInput.
+	// 	SetLabel("Message: ").
+	// 	SetFieldWidth(0).
+	// 	SetChangedFunc(handleChangeInput).
+	// 	SetDoneFunc(handleSendMessage)
 
-	// Get username from user
-	reader := bufio.NewReader(os.Stdin)
-	// username := "PabloDebug"
+	// mainView := tview.NewGrid().
+	// 	SetRows(0, 3).
+	// 	SetBorders(false).
+	// 	AddItem(placeholder, 0, 0, 1, 1, 0, 0, false).
+	// 	AddItem(chatMessageInput, 1, 0, 1, 1, 0, 0, true)
 
-	err := initJoin(hostName, hostPort)
-	if err != nil {
-		log.Println("join server:", err)
-		return
-	}
+	// fmt.Fprintf(placeholder, "%s", testChatText)
 
-	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/ws"}
+	// placeholder.SetBorder(true).SetTitle("Pablo")
 
-	conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Printf("handshake failed with status %d", response.StatusCode)
-		log.Fatal("dial:", err)
-	}
-	defer conn.Close()
-	messageservice.SetHostInfo(hostName, hostPort)
-	log.Print("Joined chat\n\n")
+	// if err := app.SetRoot(mainView, true).EnableMouse(true).Run(); err != nil {
+	// 	panic(err)
+	// }
 
-	done := make(chan struct{})
-	connectionHandler := func() {
-		defer close(done)
-
-		for {
-			var msg comm.Message
-			err := conn.ReadJSON(&msg)
-			if err != nil {
-				log.Println("read:", err)
-				return
-			}
-
-			if msg.Type == comm.Text {
-				err := msg.Print(util.GetRoomKey())
-				// fmt.Println(msg)
-				if err != nil {
-					log.Println("decryption:", err)
-					continue
-				}
-			}
-
-			if msg.Type == comm.Command {
-				messageservice.HandleCommand(&msg)
-			}
-
-			if msg.Type == comm.Info {
-				messageservice.HandleInfo(&msg, conn)
-			}
-		}
-	}
-
-	green := color.New(color.FgGreen).SprintFunc()
-
-	inputHandler := func() {
-		// First message to send upon connection is the uuid
-		uuidBinary, err := id.MarshalBinary()
-		if err != nil {
-			log.Println("marshal uuid:", err)
-			return
-		}
-		firstJoinMessage := comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary}
-		broadcast <- firstJoinMessage
-		for {
-			messageInput, _ := reader.ReadString('\n')
-			util.ClearLine()
-			msgLength := len(messageInput)
-			messageInput = messageInput[:msgLength-1]
-			if messageInput == "" {
-				continue
-			}
-			fmt.Printf("%s: %s\n", green("You"), messageInput)
-			// Encrypt the message
-			encryptedMessage, err := util.Encrypt([]byte(messageInput), util.GetRoomKey())
-			if err != nil {
-				log.Println("encryption:", err)
-				continue
-			}
-
-			writeMsg := comm.Message{Username: username, Message: encryptedMessage}
-			// writeMsg := comm.Message{Username: username, Message: messageInput, Type: comm.Text}
-			broadcast <- writeMsg
-			// select {
-			// case <-done:
-			// 	log.Println("done")
-			// 	return
-			// case <-time.After(time.Millisecond):
-			// }
-		}
-	}
-
-	go connectionHandler()
-	go inputHandler()
-
-	for {
-		select {
-		case <-done:
-			log.Printf("done")
-			return
-		case m := <-broadcast:
-			err := conn.WriteJSON(m)
-			if err != nil {
-				log.Println("write:", err)
-				return
-			}
-		case <-interrupt:
-			log.Println("interrupt")
-			// Cleanly close the connection by sending a close message and then
-			// waiting (with timeout) for the server to close the connection.
-			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			if err != nil {
-				log.Println("write close:", err)
-				return
-			}
-
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-			}
-			return
-		}
-	}
+	// Wait for the goroutine to finish when the user exits the chat
+	wg.Wait()
 }
-
-// TODO get handled, idiot
-// func handleMessages() {
-// }
