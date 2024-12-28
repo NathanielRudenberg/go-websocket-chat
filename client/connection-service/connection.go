@@ -1,7 +1,6 @@
 package connectionservice
 
 import (
-	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,7 +13,6 @@ import (
 	"websocket-chat/comm"
 	"websocket-chat/util"
 
-	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -104,7 +102,7 @@ func ConnectToChatServer(messageChannel *chan comm.Message) {
 	username = *user
 
 	// Get username from user
-	reader := bufio.NewReader(os.Stdin)
+	// reader := bufio.NewReader(os.Stdin)
 	// username := "PabloDebug"
 
 	err := initJoin(hostName, hostPort)
@@ -155,7 +153,7 @@ func ConnectToChatServer(messageChannel *chan comm.Message) {
 		}
 	}
 
-	green := color.New(color.FgGreen).SprintFunc()
+	// green := color.New(color.FgGreen).SprintFunc()
 
 	inputHandler := func() {
 		// First message to send upon connection is the uuid
@@ -167,15 +165,17 @@ func ConnectToChatServer(messageChannel *chan comm.Message) {
 		firstJoinMessage := comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary}
 		broadcast <- firstJoinMessage
 		for {
-			// chatMessage := <-chatInput
-			messageInput, _ := reader.ReadString('\n')
-			util.ClearLine()
-			msgLength := len(messageInput)
-			messageInput = messageInput[:msgLength-1]
-			if messageInput == "" {
-				continue
-			}
-			fmt.Printf("%s: %s\n", green("You"), messageInput)
+			chatMessage := <-chatInput
+
+			// messageInput, _ := reader.ReadString('\n')
+			// util.ClearLine()
+			// msgLength := len(messageInput)
+			// messageInput = messageInput[:msgLength-1]
+			// if messageInput == "" {
+			// 	continue
+			// }
+			// fmt.Printf("%s: %s\n", green("You"), messageInput)
+
 			// Encrypt the message
 			// encryptedMessage, err := util.Encrypt([]byte(messageInput), util.GetRoomKey())
 			// if err != nil {
@@ -187,7 +187,7 @@ func ConnectToChatServer(messageChannel *chan comm.Message) {
 			// // writeMsg := comm.Message{Username: username, Message: messageInput, Type: comm.Text}
 			// broadcast <- writeMsg
 
-			BroadcastMessage(messageInput)
+			BroadcastMessage(chatMessage)
 
 			// select {
 			// case <-done:

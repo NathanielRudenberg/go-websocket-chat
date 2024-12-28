@@ -40,28 +40,28 @@ func main() {
 		connectionservice.ConnectToChatServer(&messageChannel)
 	}()
 
-	// app := tview.NewApplication()
-	// placeholder := tview.NewTextView()
+	app := tview.NewApplication()
+	placeholder := tview.NewTextView()
 
-	// chatMessageInput.
-	// 	SetLabel("Message: ").
-	// 	SetFieldWidth(0).
-	// 	SetChangedFunc(handleChangeInput).
-	// 	SetDoneFunc(handleSendMessage)
+	chatMessageInput.
+		SetLabel("Message: ").
+		SetFieldWidth(0).
+		SetChangedFunc(handleChangeInput).
+		SetDoneFunc(handleSendMessage)
 
-	// mainView := tview.NewGrid().
-	// 	SetRows(0, 3).
-	// 	SetBorders(false).
-	// 	AddItem(placeholder, 0, 0, 1, 1, 0, 0, false).
-	// 	AddItem(chatMessageInput, 1, 0, 1, 1, 0, 0, true)
+	mainView := tview.NewGrid().
+		SetRows(0, 3).
+		SetBorders(false).
+		AddItem(placeholder, 0, 0, 1, 1, 0, 0, false).
+		AddItem(chatMessageInput, 1, 0, 1, 1, 0, 0, true)
 
-	// fmt.Fprintf(placeholder, "%s", testChatText)
+	fmt.Fprintf(placeholder, "%s", testChatText)
 
-	// placeholder.SetBorder(true).SetTitle("Pablo")
+	placeholder.SetBorder(true).SetTitle("Pablo")
 
-	// if err := app.SetRoot(mainView, true).EnableMouse(true).Run(); err != nil {
-	// 	panic(err)
-	// }
+	if err := app.SetRoot(mainView, true).EnableMouse(true).Run(); err != nil {
+		panic(err)
+	}
 
 	// Wait for the goroutine to finish when the user exits the chat
 	wg.Wait()
