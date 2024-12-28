@@ -45,8 +45,6 @@ func BroadcastMessage(message string) error {
 
 func initJoin(hostName *string, hostPort *int) error {
 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/connect"}
-	// log.Printf("connecting to %s", u.String())
-	log.Printf("connecting to %s:%d", *hostName, *hostPort)
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal(err)
@@ -90,7 +88,7 @@ func initJoin(hostName *string, hostPort *int) error {
 	return errors.New("could not join chat")
 }
 
-func ConnectToChatServer(messageChannel *chan comm.Message) {
+func ConnectToChatServer(messageChannel *chan string) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
@@ -120,7 +118,6 @@ func ConnectToChatServer(messageChannel *chan comm.Message) {
 	}
 	defer conn.Close()
 	messageservice.SetHostInfo(hostName, hostPort)
-	log.Print("Joined chat\n\n")
 
 	done := make(chan struct{})
 	connectionHandler := func() {
@@ -135,12 +132,14 @@ func ConnectToChatServer(messageChannel *chan comm.Message) {
 			}
 
 			if msg.Type == comm.Text {
-				err := msg.Print(util.GetRoomKey())
+				// err := msg.Print()
+				decryptedMessage, err := msg.GetDecryptedMessage()
 				// fmt.Println(msg)
 				if err != nil {
 					log.Println("decryption:", err)
 					continue
 				}
+				*messageChannel <- decryptedMessage
 			}
 
 			if msg.Type == comm.Command {
