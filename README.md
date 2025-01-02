@@ -1,6 +1,6 @@
 # Go Websocket Chat
 
-![alt text](preview.png)
+![preview](https://github.com/user-attachments/assets/a044bd91-e015-48d5-9428-7ed20ecf9205)
 
 ## A simple TCP websocket and encryption demo
 
