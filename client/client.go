@@ -61,10 +61,13 @@ func main() {
 	}()
 
 	chatMessageInput.
-		SetLabel("Message: ").
+		SetPlaceholder("Send a message...").
+		SetPlaceholderTextColor(tcell.ColorLightGray).
+		SetPlaceholderStyle(tcell.StyleDefault.Foreground(tcell.ColorLightGray)).
 		SetFieldWidth(0).
 		SetChangedFunc(handleChangeInput).
-		SetDoneFunc(handleSendMessage)
+		SetDoneFunc(handleSendMessage).
+		SetFieldBackgroundColor(tcell.ColorBlack)
 
 	mainView := tview.NewGrid().
 		SetRows(0, 3).
