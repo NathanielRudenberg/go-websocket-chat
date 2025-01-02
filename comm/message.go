@@ -19,14 +19,27 @@ func (msg Message) String() string {
 	return fmt.Sprintf("{%s %s %d %s}", msg.Username, msg.Message, msg.Type, msg.Data)
 }
 
-func (msg *Message) Print(psk []byte) error {
-	decryptedBytes, err := util.Decrypt(msg.Message, psk)
+func (msg *Message) Print() error {
+	key := util.GetRoomKey()
+	decryptedBytes, err := util.Decrypt(msg.Message, key)
 	if err != nil {
 		return err
 	}
 	decryptedMessage := string(decryptedBytes)
 	fmt.Printf("%s: %s\n", msg.Username, decryptedMessage)
 	return nil
+}
+
+func (msg *Message) GetDecryptedMessage() (string, error) {
+	key := util.GetRoomKey()
+	decryptedBytes, err := util.Decrypt(msg.Message, key)
+	if err != nil {
+		return "", err
+	}
+	decryptedMessage := string(decryptedBytes)
+
+	message := fmt.Sprintf("%s: %s", msg.Username, decryptedMessage)
+	return message, nil
 }
 
 const (
