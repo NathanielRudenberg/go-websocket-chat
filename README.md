@@ -12,27 +12,27 @@ While the chat is encrypted, it is definitely not secure. This was a quick proje
 ### Inital setup
 After cloning the repo, `cd` into the project directory and set up the Go modules.
 ```console
-foo@bar:~/go-websocket-chat$ git clone https://github.com/NathanielRudenberg/go-websocket-chat.git
-foo@bar:~/go-websocket-chat$ cd go-websocket-chat
+foo@bar:~$ git clone https://github.com/NathanielRudenberg/go-websocket-chat.git
+foo@bar:~$ cd go-websocket-chat
 foo@bar:~/go-websocket-chat$ go mod download
 ```
 
 ### Running the server
 ```console
 foo@bar:~/go-websocket-chat$ cd server
-foo@bar:~/go-websocket-chat$ go run .
+foo@bar:~/go-websocket-chat/server$ go run .
 ```
 The default port is 8080. To specify a port to listen on:
 ```console
-foo@bar:~/go-websocket-chat$ go run . -port <port number>
+foo@bar:~/go-websocket-chat/server$ go run . -port <port number>
 ```
 
 ### Running the client
 ```console
 foo@bar:~/go-websocket-chat$ cd client
-foo@bar:~/go-websocket-chat$ go run . -username <chat username>
+foo@bar:~/go-websocket-chat/client$ go run . -username <chat username>
 ```
 The default host is `localhost:8080`. To specify a different host or port, use the `-host` and `-port` options:
 ```console
-foo@bar:~/go-websocket-chat$ go run . -username <chat username> -host <hostname> -port <port-number>
+foo@bar:~/go-websocket-chat/client$ go run . -username <chat username> -host <hostname> -port <port-number>
 ```
