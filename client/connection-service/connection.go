@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/url"
 	"time"
+
 	messageservice "websocket-chat/client/message-service"
 	"websocket-chat/comm"
 	"websocket-chat/util"
@@ -115,7 +116,7 @@ func ConnectToChatServer(chatChannel *chan string, closeChannel *chan struct{}) 
 		log.Fatal("dial:", err)
 	}
 	defer conn.Close()
-	messageservice.SetHostInfo(hostName, hostPort)
+	messageservice.SetHostInfo(hostName, hostPort, &broadcast, &id)
 
 	done := make(chan struct{})
 	connectionHandler := func() {

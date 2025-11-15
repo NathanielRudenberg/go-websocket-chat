@@ -2,14 +2,16 @@ package comm
 
 import (
 	"fmt"
+
 	"websocket-chat/util"
 )
 
 type Message struct {
-	Username string `json:"username"`
-	Message  string `json:"message"`
-	Type     int    `json:"messageType"`
-	Data     []byte `json:"data"`
+	Username    string `json:"username"`
+	Message     string `json:"message"`
+	Type        int    `json:"messageType"`
+	Data        []byte `json:"data"`
+	Destination string `json:destination,`
 }
 
 func (msg Message) String() string {
