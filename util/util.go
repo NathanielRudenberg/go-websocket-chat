@@ -13,8 +13,6 @@ import (
 	"io"
 	"log"
 	"math/big"
-
-	"github.com/gorilla/websocket"
 )
 
 var (
@@ -114,58 +112,58 @@ func CalculateSharedSecret(publicKeyRemote *big.Int) *big.Int {
 	return sharedSecret
 }
 
-func DoKeyExchange(conn *websocket.Conn) error {
-	// Receive P, G, key hub public key from server
-	_, Pbytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving P from server:" + err.Error())
-		return newError
-	}
-	P = new(big.Int).SetBytes(Pbytes)
-
-	_, Gbytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving G from server:" + err.Error())
-		return newError
-	}
-	G = new(big.Int).SetBytes(Gbytes)
-
-	_, keyHubPubKeyBytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving key hub's public key:" + err.Error())
-		return newError
-	}
-	keyHubPubKey := new(big.Int).SetBytes(keyHubPubKeyBytes)
-
-	// Calculate private key
-	GeneratePrivateKey()
-
-	// Calculate public key
-	CalculatePublicKey(G)
-
-	// Send public key to server
-	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
-	if err != nil {
-		newError := errors.New("Error sending public key to server:" + err.Error())
-		return newError
-	}
-	// Calculate PSK with server pub key
-	psk := CalculateSharedSecret(keyHubPubKey)
-
-	// Receive room key from server
-	_, encryptedRoomKeyBytes, err := conn.ReadMessage()
-	if err != nil {
-		newError := errors.New("Error receiving room key from server:" + err.Error())
-		return newError
-	}
-
-	roomKey, err = Decrypt(string(encryptedRoomKeyBytes), psk.Bytes())
-	if err != nil {
-		newError := errors.New("Error decrypting room key:" + err.Error())
-		return newError
-	}
-	return nil
-}
+// func DoKeyExchange(conn *websocket.Conn) error {
+// 	// Receive P, G, key hub public key from server
+// 	_, Pbytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving P from server:" + err.Error())
+// 		return newError
+// 	}
+// 	P = new(big.Int).SetBytes(Pbytes)
+//
+// 	_, Gbytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving G from server:" + err.Error())
+// 		return newError
+// 	}
+// 	G = new(big.Int).SetBytes(Gbytes)
+//
+// 	_, keyHubPubKeyBytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving key hub's public key:" + err.Error())
+// 		return newError
+// 	}
+// 	keyHubPubKey := new(big.Int).SetBytes(keyHubPubKeyBytes)
+//
+// 	// Calculate private key
+// 	GeneratePrivateKey()
+//
+// 	// Calculate public key
+// 	CalculatePublicKey(G)
+//
+// 	// Send public key to server
+// 	err = conn.WriteMessage(websocket.BinaryMessage, publicKey.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error sending public key to server:" + err.Error())
+// 		return newError
+// 	}
+// 	// Calculate PSK with server pub key
+// 	psk := CalculateSharedSecret(keyHubPubKey)
+//
+// 	// Receive room key from server
+// 	_, encryptedRoomKeyBytes, err := conn.ReadMessage()
+// 	if err != nil {
+// 		newError := errors.New("Error receiving room key from server:" + err.Error())
+// 		return newError
+// 	}
+//
+// 	roomKey, err = Decrypt(string(encryptedRoomKeyBytes), psk.Bytes())
+// 	if err != nil {
+// 		newError := errors.New("Error decrypting room key:" + err.Error())
+// 		return newError
+// 	}
+// 	return nil
+// }
 
 // func ShareKeys(hostName *string, hostPort *int) error {
 // 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/key-exchange"}

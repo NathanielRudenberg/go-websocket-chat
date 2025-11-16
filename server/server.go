@@ -44,7 +44,7 @@ func main() {
 	flag.Parse()
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/ws", handleConnections)
-	http.HandleFunc("/connect", handleJoin)
+	// http.HandleFunc("/connect", handleJoin)
 	// http.HandleFunc("/key-exchange", handleKeyExchange) // The key hub connects here to exchange keys with new clients
 
 	go handleMessages()
@@ -177,70 +177,70 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 // 	}
 // }
 
-func handleJoin(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		fmt.Println("handle join:", err)
-		return
-	}
-	defer conn.Close()
-	client := &serverclient.Client{Conn: conn}
-	// mu.Lock()
-	// incomingClients[client] = true
-	// mu.Unlock()
-
-	// Get client ID
-	var joinMessage comm.Message
-	err = client.Conn.ReadJSON(&joinMessage)
-	if err != nil {
-		log.Println("handle join: get id:", err)
-		client.Disconnect()
-		return
-	}
-
-	if joinMessage.Type == comm.Info && joinMessage.Message == "join" {
-		clientId := (*uuid.UUID)(joinMessage.Data)
-		clientIdString := clientId.String()
-		ids[clientIdString] = client
-		if keyHub == nil {
-			// This client is the key hub
-			err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "kh-join-done", Type: comm.Info})
-			if err != nil {
-				log.Println("handle join: send join chat command:", err)
-				delete(ids, clientIdString)
-				return
-			}
-			ids[clientIdString].Conn = nil
-		} else {
-			// This client is not the key hub
-			err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "cl", Type: comm.Info})
-			if err != nil {
-				log.Println("handle join: send join chat command:", err)
-				delete(ids, clientIdString)
-				return
-			}
-		}
-	}
-
-	// If there is a key hub, do key exchange
-	// if keyHub != nil {
-	// 	exchangeKeys := comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command}
-	// 	messageEvent := MessageEvent{message: exchangeKeys, recipient: keyHub}
-	// 	broadcast <- messageEvent
-	//
-	// 	// Wait for client to finish key exchange
-	// 	// This is done because the connection will close if this function
-	// 	// returns. If it returns before the key exchange is done, the client
-	// 	// will not be able to finish the key exchange
-	// 	for {
-	// 		if client.DHDone {
-	// 			return
-	// 		} else {
-	// 			time.Sleep(100 * time.Millisecond)
-	// 		}
-	// 	}
-	// }
-}
+// func handleJoin(w http.ResponseWriter, r *http.Request) {
+// 	conn, err := upgrader.Upgrade(w, r, nil)
+// 	if err != nil {
+// 		fmt.Println("handle join:", err)
+// 		return
+// 	}
+// 	defer conn.Close()
+// 	client := &serverclient.Client{Conn: conn}
+// 	// mu.Lock()
+// 	// incomingClients[client] = true
+// 	// mu.Unlock()
+//
+// 	// Get client ID
+// 	var joinMessage comm.Message
+// 	err = client.Conn.ReadJSON(&joinMessage)
+// 	if err != nil {
+// 		log.Println("handle join: get id:", err)
+// 		client.Disconnect()
+// 		return
+// 	}
+//
+// 	if joinMessage.Type == comm.Info && joinMessage.Message == "join" {
+// 		clientId := (*uuid.UUID)(joinMessage.Data)
+// 		clientIdString := clientId.String()
+// 		ids[clientIdString] = client
+// 		if keyHub == nil {
+// 			// This client is the key hub
+// 			err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "kh-join-done", Type: comm.Info})
+// 			if err != nil {
+// 				log.Println("handle join: send join chat command:", err)
+// 				delete(ids, clientIdString)
+// 				return
+// 			}
+// 			ids[clientIdString].Conn = nil
+// 		} else {
+// 			// This client is not the key hub
+// 			err = ids[clientIdString].WriteJSON(comm.Message{Username: "server", Message: "cl", Type: comm.Info})
+// 			if err != nil {
+// 				log.Println("handle join: send join chat command:", err)
+// 				delete(ids, clientIdString)
+// 				return
+// 			}
+// 		}
+// 	}
+//
+// 	// If there is a key hub, do key exchange
+// 	// if keyHub != nil {
+// 	// 	exchangeKeys := comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command}
+// 	// 	messageEvent := MessageEvent{message: exchangeKeys, recipient: keyHub}
+// 	// 	broadcast <- messageEvent
+// 	//
+// 	// 	// Wait for client to finish key exchange
+// 	// 	// This is done because the connection will close if this function
+// 	// 	// returns. If it returns before the key exchange is done, the client
+// 	// 	// will not be able to finish the key exchange
+// 	// 	for {
+// 	// 		if client.DHDone {
+// 	// 			return
+// 	// 		} else {
+// 	// 			time.Sleep(100 * time.Millisecond)
+// 	// 		}
+// 	// 	}
+// 	// }
+// }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
