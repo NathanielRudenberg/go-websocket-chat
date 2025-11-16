@@ -267,9 +267,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clientIdString := clientId.String()
-	client := ids[clientIdString]
-	client.Conn = conn
+	client := &serverclient.Client{Conn: conn}
 	clients[client] = true
+	ids[clientIdString] = client
+
+	// client := ids[clientIdString]
+	// client.Conn = conn
+	// clients[client] = true
 
 	if keyHub == nil {
 		// mu.Lock()
