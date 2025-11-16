@@ -11,7 +11,7 @@ type Message struct {
 	Message     string `json:"message"`
 	Type        int    `json:"messageType"`
 	Data        []byte `json:"data"`
-	Destination string `json:destination,`
+	Destination string `json:"destination,omitempty",`
 }
 
 func (msg Message) String() string {

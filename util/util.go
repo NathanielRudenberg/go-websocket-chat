@@ -236,3 +236,15 @@ func GetPublicKey() *big.Int {
 	return publicKey
 }
 
+func SetP(p *big.Int) {
+	P = p
+}
+
+func SetG(g *big.Int) {
+	G = g
+}
+
+func SetRoomKey(key []byte) {
+	roomKey = key
+}
+
