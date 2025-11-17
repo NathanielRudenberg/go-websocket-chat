@@ -36,11 +36,6 @@ func SendEncryptedMessage(messageType int, data []byte, key []byte, conn *websoc
 
 func HandleInfo(info *comm.Message, conn *websocket.Conn) {
 	switch info.Message {
-	// case "ke":
-	// 	err := conn.WriteJSON(comm.Message{Username: username, Message: "ke", Type: comm.Info})
-	// 	if err != nil {
-	// 		log.Println("send info:", err)
-	// 	}
 	}
 }
 

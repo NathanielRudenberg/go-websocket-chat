@@ -42,51 +42,6 @@ func BroadcastMessage(message string) error {
 	return nil
 }
 
-// func initJoin(hostName *string, hostPort *int) error {
-// 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/connect"}
-// 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 		return err
-// 	}
-// 	defer conn.Close()
-//
-// 	// Send join message
-// 	uuidBinary, err := id.MarshalBinary()
-// 	if err != nil {
-// 		log.Println("marshal uuid:", err)
-// 		return err
-// 	}
-// 	err = conn.WriteJSON(comm.Message{Username: username, Message: "join", Type: comm.Info, Data: uuidBinary})
-// 	if err != nil {
-// 		log.Println("send join:", err)
-// 		return err
-// 	}
-//
-// 	var msg comm.Message
-// 	err = conn.ReadJSON(&msg)
-// 	if err != nil {
-// 		log.Println("read join chat command:", err)
-// 		return err
-// 	}
-// 	if msg.Type == comm.Info {
-// 		switch msg.Message {
-// 		case "kh-join-done":
-// 			// Should only receive if key hub
-// 			return nil
-// 		case "cl":
-// 			// Should only receive if not key hub
-// 			err := util.DoKeyExchange(conn)
-// 			if err != nil {
-// 				newError := errors.New("Error doing key exchange:" + err.Error())
-// 				return newError
-// 			}
-// 			return nil
-// 		}
-// 	}
-// 	return errors.New("could not join chat")
-// }
-
 func ConnectToChatServer(chatChannel *chan string, closeChannel *chan struct{}) {
 	// interrupt := make(chan os.Signal, 1)
 	// signal.Notify(interrupt, os.Interrupt)
@@ -97,16 +52,6 @@ func ConnectToChatServer(chatChannel *chan string, closeChannel *chan struct{}) 
 	flag.Parse()
 
 	username = *user
-
-	// Get username from user
-	// reader := bufio.NewReader(os.Stdin)
-	// username := "PabloDebug"
-
-	// err := initJoin(hostName, hostPort)
-	// if err != nil {
-	// 	log.Println("join server:", err)
-	// 	return
-	// }
 
 	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", *hostName, *hostPort), Path: "/ws"}
 
