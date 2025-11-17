@@ -310,7 +310,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if msg.Type == comm.Text {
+		if msg.Type == comm.Text || msg.Type == comm.Command {
 			messageEvent := MessageEvent{message: msg, client: client}
 			broadcast <- messageEvent
 		}
