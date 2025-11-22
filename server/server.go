@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
-	"sync"
+	"time"
 
 	"websocket-chat/comm"
 	serverclient "websocket-chat/server/serverClient"
@@ -14,13 +16,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 )
-
-type MessageEvent struct {
-	message   comm.Message
-	client    *serverclient.Client
-	recipient *serverclient.Client
-}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -30,44 +27,52 @@ var upgrader = websocket.Upgrader{
 
 var (
 	clients = make(map[*serverclient.Client]bool)
-	// incomingClients = make(map[*serverclient.Client]bool)
-	ids       = make(map[string]*serverclient.Client)
-	broadcast = make(chan MessageEvent)
-	P         = util.GeneratePrime()
-	G         = big.NewInt(2)
-	keyHub    *serverclient.Client
-	mu        sync.Mutex
+	ids     = make(map[string]*serverclient.Client)
+	P       = util.GeneratePrime()
+	G       = big.NewInt(2)
+	rdb     = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+		Protocol: 2,
+	})
+	ctx            = context.Background()
+	ChatChannel    = "global_chat"
+	KeyHubRedisKey = "chatroom-key-hub-id"
 )
 
 func main() {
 	hostPort := flag.Int("port", 8080, "Server Port")
 	flag.Parse()
+	_, err := rdb.Ping(ctx).Result()
+	if err != nil {
+		log.Fatalf("Could not connect to Redis: %v", err)
+	}
+	log.Println("Connected to Redis")
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/ws", handleConnections)
-	// http.HandleFunc("/connect", handleJoin)
-	// http.HandleFunc("/key-exchange", handleKeyExchange) // The key hub connects here to exchange keys with new clients
 
 	go handleMessages()
 
 	fmt.Printf("Server started on :%s\n", fmt.Sprint(*hostPort))
-	err := http.ListenAndServe(fmt.Sprintf(":%d", *hostPort), nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", *hostPort), nil)
 	if err != nil {
 		panic("Error starting server: " + err.Error())
 	}
 }
 
-func setKeyHub(client *serverclient.Client) {
-	client.SetIsKeyHub(true)
-	keyHub = client
-}
-
-func chooseNewKeyHub() {
-	keyHub = nil
-	for c := range clients {
-		setKeyHub(c)
-		break
-	}
-}
+// func setKeyHub(client *serverclient.Client) {
+// 	client.SetIsKeyHub(true)
+// 	keyHub = client
+// }
+//
+// func chooseNewKeyHub() {
+// 	keyHub = nil
+// 	for c := range clients {
+// 		setKeyHub(c)
+// 		break
+// 	}
+// }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "server is running")
@@ -102,41 +107,92 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clients[client] = true
 	ids[clientIdString] = client
 
-	if keyHub == nil {
-		setKeyHub(client)
-		makeKeysMessage := comm.Message{Username: "server", Message: "generate-keys", Type: comm.Command}
-		messageEvent := MessageEvent{message: makeKeysMessage, recipient: keyHub}
-		broadcast <- messageEvent
-	} else {
-		// Send a message to key hub to open new connection?
-		// Make key hub channel for the new connection?
-		// newMessageForKeyHub := comm.Message{Username: "server", Message: "Ayo you are the key hub AND someone new has joined", Type: comm.Text}
-		// messageEvent := MessageEvent{message: newMessageForKeyHub, recipient: keyHub}
-		// broadcast <- messageEvent
+	for {
+		success, err := rdb.SetNX(ctx, KeyHubRedisKey, clientIdString, 0).Result()
+		if err != nil {
+			log.Printf("Error setting key hub in Redis: %v", err)
+			// Try again
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
 
-		message := comm.Message{Username: "server", Message: "exchange-keys", Type: comm.Command, Data: []byte(clientIdString)}
-		messageEvent := MessageEvent{message: message, recipient: keyHub}
-		broadcast <- messageEvent
+		if success {
+			client.SetIsKeyHub(true)
+
+			makeKeysMessage := comm.Message{
+				Username:    "server",
+				Message:     "generate-keys",
+				Type:        comm.Command,
+				Destination: clientIdString,
+			}
+
+			payloadMsg, _ := json.Marshal(makeKeysMessage)
+			if err := rdb.Publish(ctx, ChatChannel, payloadMsg).Err(); err != nil {
+				log.Printf("Error publishing 'generate-keys' command to Redis: %v", err)
+			}
+			// Done! Leave the loop.
+			break
+		} else {
+			currentKeyHub, err := rdb.Get(ctx, KeyHubRedisKey).Result()
+			if err == redis.Nil {
+				/* Key hub left right after we checked for it. Loop again. */
+				continue
+			} else if err != nil {
+				log.Printf("Redis error fetching Key Hub: %v", err)
+				time.Sleep(100 * time.Millisecond)
+				continue
+			} else {
+				// Found a key hub. Request keys from it.
+				message := comm.Message{
+					Username:    "server",
+					Message:     "exchange-keys",
+					Type:        comm.Command,
+					Data:        []byte(clientIdString),
+					Destination: currentKeyHub,
+				}
+				payloadMsg, _ := json.Marshal(message)
+				if err := rdb.Publish(ctx, ChatChannel, payloadMsg).Err(); err != nil {
+					log.Printf("Error publishing 'exchange-keys' command to Redis: %v", err)
+				}
+				// Done! Leave the loop.
+				break
+			}
+		}
 	}
 
 	for {
-		// listenMessages(conn, client)
-
 		var msg comm.Message
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			delete(clients, client)
 			delete(ids, clientIdString)
 			if client.IsKeyHub() {
-				// Choose new key hub
-				chooseNewKeyHub()
+				rdb.Del(ctx, KeyHubRedisKey)
+
+				electionMsg := comm.Message{
+					Username: "server",
+					Message:  "elect-new-key-hub",
+					Type:     comm.Command,
+				}
+				payloadMsg, _ := json.Marshal(electionMsg)
+				rdb.Publish(ctx, ChatChannel, payloadMsg)
 			}
 			return
 		}
 
-		if msg.Type == comm.Text || msg.Type == comm.Command {
-			messageEvent := MessageEvent{message: msg, client: client}
-			broadcast <- messageEvent
+		if msg.Type == comm.Text || msg.Type == comm.Command || msg.Type == comm.Info {
+			if msg.Type == comm.Text {
+				msg.SenderID = clientIdString
+			}
+
+			payloadBytes, err := json.Marshal(msg)
+			if err != nil {
+				log.Printf("Marshal error: %v", err)
+				continue
+			}
+			if err := rdb.Publish(ctx, ChatChannel, payloadBytes).Err(); err != nil {
+				log.Printf("Error publishing to Redis: %v", err)
+			}
 		}
 
 		if msg.Type == comm.Info {
@@ -149,49 +205,72 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleMessages() {
-	for {
-		msgEvent := <-broadcast
+	// Subscribe to the Redis channel
+	pubsub := rdb.Subscribe(ctx, ChatChannel)
+	defer pubsub.Close()
 
-		// Handle unicast messaging
-		if msgEvent.message.Destination != "" {
-			// Find the client based on UUID
-			recipient := ids[msgEvent.message.Destination]
+	redisChannel := pubsub.Channel()
+
+	// Loop over channel to listen for messages
+	for msg := range redisChannel {
+		var chatMessage comm.Message
+
+		// Deserialize the Redis message
+		if err := json.Unmarshal([]byte(msg.Payload), &chatMessage); err != nil {
+			log.Printf("Error unmarshalling message from Redis: %v", err)
+			continue
+		}
+
+		// Handle server commands
+		if chatMessage.Type == comm.Command && chatMessage.Message == "elect-new-key-hub" {
+			if len(ids) > 0 {
+				for candidateID, candidateClient := range ids {
+					success, err := rdb.SetNX(ctx, KeyHubRedisKey, candidateID, 0).Result()
+					if err != nil {
+						log.Printf("Election error: %v", err)
+						break
+					}
+
+					if success {
+						candidateClient.SetIsKeyHub(true)
+					}
+					break
+				}
+			}
+			continue
+		}
+
+		// Unicast messaging
+		if chatMessage.Destination != "" {
+			recipient := ids[chatMessage.Destination]
 
 			if recipient != nil {
-				// Send the message directly to the recipient
-				err := recipient.WriteJSON(msgEvent.message)
+				err := recipient.WriteJSON(chatMessage)
 				if err != nil {
 					fmt.Println("handleMessages:", err)
 					recipient.Disconnect()
 					delete(clients, recipient)
-					delete(ids, msgEvent.message.Destination)
+					delete(ids, chatMessage.Destination)
 					if recipient.IsKeyHub() {
-						chooseNewKeyHub()
+						rdb.Del(ctx, KeyHubRedisKey)
 					}
 				}
 			}
-			// Skip broadcast because it's a unicast message
 			continue
 		}
 
-		if msgEvent.recipient != nil {
-			err := msgEvent.recipient.WriteJSON(msgEvent.message)
-			if err != nil {
-				fmt.Println("handle messages:", err)
-				msgEvent.recipient.Disconnect()
-				delete(clients, msgEvent.recipient)
+		// Broadcast messaging
+		for clientID, client := range ids {
+			if chatMessage.SenderID != "" && clientID == chatMessage.SenderID {
+				continue
 			}
-		} else {
-			for client := range clients {
-				var err error
-				if client != msgEvent.client {
-					err = client.WriteJSON(msgEvent.message)
-				}
-				if err != nil {
-					fmt.Println("handle messages:", err)
-					client.Disconnect()
-					delete(clients, client)
-				}
+
+			err := client.WriteJSON(chatMessage)
+			if err != nil {
+				log.Println("handleMessages:", err)
+				client.Disconnect()
+				delete(clients, client)
+				delete(ids, clientID)
 			}
 		}
 	}
