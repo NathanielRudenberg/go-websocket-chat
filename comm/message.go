@@ -12,6 +12,7 @@ type Message struct {
 	Type        int    `json:"messageType"`
 	Data        []byte `json:"data"`
 	Destination string `json:"destination,omitempty",`
+	SenderID    string `json:senderId,omitempty`
 }
 
 func (msg Message) String() string {
