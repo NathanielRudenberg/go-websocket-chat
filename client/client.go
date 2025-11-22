@@ -97,7 +97,10 @@ func main() {
 	}
 
 	// Close the connection when the user exits the chat
-	closeChannel <- struct{}{}
+	select {
+	case closeChannel <- struct{}{}:
+	default:
+	}
 
 	// Wait for the goroutine to finish when the user exits the chat
 	wg.Wait()
