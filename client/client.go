@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sync"
+
 	connectionservice "websocket-chat/client/connection-service"
 
 	"github.com/gdamore/tcell/v2"
@@ -15,6 +16,7 @@ var (
 	chatMessageInput *tview.InputField  = tview.NewInputField()
 	chatChannel                         = make(chan string)
 	closeChannel                        = make(chan struct{})
+	chatWindow       *tview.TextView
 )
 
 func handleSendMessage(key tcell.Key) {
@@ -25,6 +27,17 @@ func handleSendMessage(key tcell.Key) {
 		if message != "" {
 			connectionservice.SendChat(message)
 			yourMessage := fmt.Sprintf("[green]You[white]: %s", message)
+
+			// _, _, w, _ := chatWindow.GetInnerRect()
+			// msgWidth := tview.TaggedStringWidth(yourMessage)
+			// padding := w - msgWidth
+			// if padding < 0 {
+			// 	padding = 0
+			// }
+			//
+			// paddedMsg := fmt.Sprintf("%s%s", strings.Repeat(" ", padding), yourMessage)
+			//
+			// chatChannel <- paddedMsg
 			chatChannel <- yourMessage
 			chatMessageInput.SetText("")
 		}
@@ -45,10 +58,10 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		connectionservice.ConnectToChatServer(&chatChannel, &closeChannel)
+		connectionservice.ConnectToChatServer(&chatChannel, &closeChannel, app.Stop)
 	}()
 
-	chatWindow := tview.NewTextView().
+	chatWindow = tview.NewTextView().
 		SetChangedFunc(handleChangeTextView).
 		SetScrollable(false).
 		SetDynamicColors(true)

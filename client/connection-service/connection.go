@@ -42,7 +42,7 @@ func BroadcastMessage(message string) error {
 	return nil
 }
 
-func ConnectToChatServer(chatChannel *chan string, closeChannel *chan struct{}) {
+func ConnectToChatServer(chatChannel *chan string, closeChannel *chan struct{}, stopApp func()) {
 	// interrupt := make(chan os.Signal, 1)
 	// signal.Notify(interrupt, os.Interrupt)
 
@@ -72,6 +72,7 @@ func ConnectToChatServer(chatChannel *chan string, closeChannel *chan struct{}) 
 			err := conn.ReadJSON(&msg)
 			if err != nil {
 				log.Println("read:", err)
+				stopApp()
 				return
 			}
 
